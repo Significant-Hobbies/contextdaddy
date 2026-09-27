@@ -8,7 +8,7 @@ import subprocess
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument("binary", nargs="?", type=Path)
-parser.add_argument("--ccusage", type=Path, help="Pinned ccusage 20.0.20 executable to bundle")
+parser.add_argument("--ccusage", type=Path, help="Pinned ccusage 20.0.24 executable to bundle")
 parser.add_argument("--output", type=Path, default=root / "artifacts/ContextDaddy.app")
 parser.add_argument("--unsigned", action="store_true", help="Leave signing to the distribution packager")
 parser.add_argument("--version", default="0.1.0", help="Package version")
@@ -41,10 +41,10 @@ ccusage_candidates = ([args.ccusage] if args.ccusage else []) + [
 ]
 ccusage = next((candidate for candidate in ccusage_candidates if candidate and candidate.is_file()), None)
 if ccusage is None:
-    raise SystemExit("A ccusage 20.0.20 executable is required; pass --ccusage <path>.")
+    raise SystemExit("A ccusage 20.0.24 executable is required; pass --ccusage <path>.")
 version = subprocess.run([str(ccusage), "--version"], capture_output=True, text=True, check=True, timeout=10)
-if version.stdout.strip() != "ccusage 20.0.20":
-    raise SystemExit(f"Expected ccusage 20.0.20, got: {version.stdout.strip()!r}")
+if version.stdout.strip() != "ccusage 20.0.24":
+    raise SystemExit(f"Expected ccusage 20.0.24, got: {version.stdout.strip()!r}")
 if not (root / "CONTEXTDADDY_NOTICES.md").is_file():
     raise SystemExit("Missing ccusage attribution and MIT notice.")
 

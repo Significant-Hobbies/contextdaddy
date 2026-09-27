@@ -34,7 +34,7 @@ def main():
     parser.add_argument("--notary-api-key", type=Path, help="Path to protected App Store Connect API key")
     parser.add_argument("--notary-key-id", help="App Store Connect API key identifier")
     parser.add_argument("--notary-issuer-id", help="App Store Connect issuer identifier")
-    parser.add_argument("--ccusage", required=True, type=Path, help="Pinned ccusage 20.0.20 executable")
+    parser.add_argument("--ccusage", required=True, type=Path, help="Pinned ccusage 20.0.24 executable")
     parser.add_argument("--output", required=True, type=Path, help="New output directory; never overwritten")
     parser.add_argument("--version", required=True, help="Release version")
     parser.add_argument("--build", type=int, required=True, help="Release build number")

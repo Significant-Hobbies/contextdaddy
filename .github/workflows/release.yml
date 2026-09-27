@@ -125,34 +125,24 @@ jobs:
           security import "$RUNNER_TEMP/signing.p12" -k "$keychain" -P "$CERT_PASSWORD" -T /usr/bin/codesign
           security set-key-partition-list -S apple-tool:,apple: -s -k "$password" "$keychain"
           security list-keychains -d user -s "$keychain"
-      - name: Recover pinned ccusage helper from prior public release
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Fetch pinned ccusage helper from the npm registry
         run: |
           set -euo pipefail
-          mkdir -p "$RUNNER_TEMP/prior" "$RUNNER_TEMP/prior-mount"
-          gh release download v0.1.0-1 -R sarthakagrawal927/contextdaddy \
-            --pattern 'ContextDaddy-0.1.0-arm64.dmg' --dir "$RUNNER_TEMP/prior"
+          curl -fsSL -o "$RUNNER_TEMP/ccusage.tgz" \
+            "https://registry.npmjs.org/@ccusage/ccusage-darwin-arm64/-/ccusage-darwin-arm64-20.0.24.tgz"
           python3 - <<'PY'
+          import base64
           import hashlib
           import os
           from pathlib import Path
-          path = Path(os.environ["RUNNER_TEMP"]) / "prior/ContextDaddy-0.1.0-arm64.dmg"
-          if hashlib.sha256(path.read_bytes()).hexdigest() != "6f01b6b90813064b0e87820860531a43c0930174d52769afc691679afe6e8a95":
-              raise SystemExit("Prior public DMG checksum mismatch")
+          data = (Path(os.environ["RUNNER_TEMP"]) / "ccusage.tgz").read_bytes()
+          digest = base64.b64encode(hashlib.sha512(data).digest()).decode()
+          if digest != "jdJP78y2SYRSoGcakANRYeqAbwG2FBw5dzyb6bakIM3S08G2LNrBFQVbsQvNB/f2OXbUtQpJzofHJvoDIyVW1Q==":
+              raise SystemExit("Pinned ccusage tarball integrity mismatch")
           PY
-          hdiutil attach -readonly -nobrowse -mountpoint "$RUNNER_TEMP/prior-mount" \
-            "$RUNNER_TEMP/prior/ContextDaddy-0.1.0-arm64.dmg"
-          cp "$RUNNER_TEMP/prior-mount/ContextDaddy.app/Contents/Helpers/ccusage" "$RUNNER_TEMP/ccusage"
-          hdiutil detach "$RUNNER_TEMP/prior-mount"
-          python3 - <<'PY'
-          import hashlib
-          import os
-          from pathlib import Path
-          path = Path(os.environ["RUNNER_TEMP"]) / "ccusage"
-          if hashlib.sha256(path.read_bytes()).hexdigest() != "70611f8dce1e4594316ba58c1f4ad62f42c17e4f3d3e7be72b23b4b9aca9e2aa":
-              raise SystemExit("Pinned ccusage helper checksum mismatch")
-          PY
+          mkdir -p "$RUNNER_TEMP/ccusage-pkg"
+          tar -xzf "$RUNNER_TEMP/ccusage.tgz" -C "$RUNNER_TEMP/ccusage-pkg"
+          install -m 0755 "$RUNNER_TEMP/ccusage-pkg/package/bin/ccusage" "$RUNNER_TEMP/ccusage"
           "$RUNNER_TEMP/ccusage" --version
       - name: Sign and notarize ContextDaddy candidate
         env:

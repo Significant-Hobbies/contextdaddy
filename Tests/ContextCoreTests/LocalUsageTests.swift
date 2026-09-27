@@ -173,7 +173,7 @@ struct LocalUsageTests {
         let json = """
         {
           "status":"\(status)","stale":false,"error":null,
-          "provenance":{"engine":"ccusage","version":"20.0.20","generated_at":"2026-09-23T12:00:00Z","timezone":"UTC","pricing_complete":true,"fallback_models":[],"unpriced_models":[]},
+          "provenance":{"engine":"ccusage","version":"20.0.24","generated_at":"2026-09-23T12:00:00Z","timezone":"UTC","pricing_complete":true,"fallback_models":[],"unpriced_models":[]},
           "daily":[
             {"period":"2026-08-01","agents":[{"agent":"codex","totals":\(totals(1, 1, 3, 3, 8, 0.01)),"models":[{"model":"gpt-old","totals":\(totals(1, 1, 3, 3, 8, 0.01)),"fallback":false,"priced":true}]}]},
             {"period":"2026-09-20","agents":[{"agent":"codex","totals":\(totals(3, 4, 20, 7, 34, 0.02)),"models":[{"model":"gpt-a","totals":\(totals(3, 4, 20, 7, 34, 0.02)),"fallback":true,"priced":true}]},{"agent":"claude","totals":\(totals(2, 0, 1, 2, 5, 0.01)),"models":[]}],"projects":[{"project":"/projects/alpha","agent":"codex","totals":\(totals(3, 4, 20, 7, 34, 0.02))}]}

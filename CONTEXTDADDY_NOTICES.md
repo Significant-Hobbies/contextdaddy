@@ -2,7 +2,7 @@
 
 ## ccusage
 
-ContextDaddy bundles the `ccusage` 20.0.20 executable for offline local usage accounting. The upstream project is by ryoppippi and contributors: https://github.com/ccusage/ccusage.
+ContextDaddy bundles the `ccusage` 20.0.24 executable for offline local usage accounting. The upstream project is by ryoppippi and contributors: https://github.com/ccusage/ccusage.
 
 MIT License
 

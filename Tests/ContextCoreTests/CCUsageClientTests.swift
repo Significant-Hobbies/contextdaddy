@@ -24,7 +24,7 @@ struct CCUsageClientTests {
     """#.utf8)
 
     @Test func mapsDirectCcusageWithoutOtherAgentsOrDevin() throws {
-        let report = try CCUsageNormalizer.normalize(unified, projects: nil, version: "20.0.20", timezone: "UTC")
+        let report = try CCUsageNormalizer.normalize(unified, projects: nil, version: "20.0.24", timezone: "UTC")
         #expect(report.provenance.engine == "ccusage")
         #expect(report.provenance.detectedAgents == ["claude", "codex", "grok"])
         #expect(report.daily[0].agents.count == 3)
@@ -37,31 +37,31 @@ struct CCUsageClientTests {
 
     @Test func projectAttributionCannotInflateCanonicalClaudeDay() throws {
         let accepted = Data(#"{"projects":{"alpha":[{"date":"2026-09-23","inputTokens":4,"cacheCreationTokens":2,"cacheReadTokens":5,"outputTokens":1,"totalTokens":12,"totalCost":0}]}}"#.utf8)
-        let acceptedReport = try CCUsageNormalizer.normalize(unified, projects: accepted, version: "20.0.20", timezone: "UTC")
+        let acceptedReport = try CCUsageNormalizer.normalize(unified, projects: accepted, version: "20.0.24", timezone: "UTC")
         #expect(acceptedReport.daily[0].projects?.first?.project == "alpha")
 
         let excess = Data(#"{"projects":{"alpha":[{"date":"2026-09-23","inputTokens":50,"cacheCreationTokens":2,"cacheReadTokens":5,"outputTokens":1,"totalTokens":58,"totalCost":0}]}}"#.utf8)
-        let rejectedReport = try CCUsageNormalizer.normalize(unified, projects: excess, version: "20.0.20", timezone: "UTC")
+        let rejectedReport = try CCUsageNormalizer.normalize(unified, projects: excess, version: "20.0.24", timezone: "UTC")
         #expect(rejectedReport.daily[0].projects == nil)
         #expect(rejectedReport.daily[0].agents.first { $0.agent == "claude" }?.totals.totalTokens == 12)
     }
 
     @Test func sessionProjectEnrichmentUsesOnlyMatchingAgentSessionIDs() throws {
-        let report = try CCUsageNormalizer.normalize(unified, projects: nil, version: "20.0.20",
+        let report = try CCUsageNormalizer.normalize(unified, projects: nil, version: "20.0.24",
                                                    codexProjectPaths: ["codex-session": "/projects/alpha",
                                                                        "other": "/projects/wrong"], timezone: "UTC")
         #expect(report.sessions?.first?.project == "/projects/alpha")
         #expect(report.daily[0].projects == nil)
 
         let claude = Data(#"{"sessions":[{"sessionId":"claude-session","projectPath":"-Users-sarthak-Desktop-vaultwealth-polaris"}]}"#.utf8)
-        let both = try CCUsageNormalizer.normalize(unified, projects: nil, version: "20.0.20",
+        let both = try CCUsageNormalizer.normalize(unified, projects: nil, version: "20.0.24",
                                                   sessionProjects: ["claude": claude],
                                                   codexProjectPaths: ["codex-session": "/projects/alpha"], timezone: "UTC")
         #expect(both.sessions?.first { $0.agent == "claude" }?.project == "-Users-sarthak-Desktop-vaultwealth-polaris")
         #expect(UsageProjectIdentity.name("-Users-sarthak-Desktop-vaultwealth-polaris") == "vaultwealth-polaris")
 
         let invalid = Data(#"{"sessions":[{"sessionId":"claude-session","projectPath":"relative/path"}]}"#.utf8)
-        let ignored = try CCUsageNormalizer.normalize(unified, projects: nil, version: "20.0.20",
+        let ignored = try CCUsageNormalizer.normalize(unified, projects: nil, version: "20.0.24",
                                                     sessionProjects: ["claude": invalid], timezone: "UTC")
         #expect(ignored.sessions?.first { $0.agent == "claude" }?.project == nil)
     }

@@ -12,7 +12,7 @@ public enum CCUsageError: Error, LocalizedError, Sendable, Equatable {
     public var errorDescription: String? {
         switch self {
         case .missingBinary: "ccusage is not bundled or installed in a supported local location."
-        case .unsupportedVersion: "ContextDaddy requires the pinned ccusage 20.0.20 JSON contract."
+        case .unsupportedVersion: "ContextDaddy requires the pinned ccusage 20.0.24 JSON contract."
         case .launchFailed: "ccusage could not be started."
         case .timedOut: "ccusage did not finish within 45 seconds."
         case .oversizedOutput: "ccusage returned more than 40 MiB of local usage data."
@@ -24,7 +24,7 @@ public enum CCUsageError: Error, LocalizedError, Sendable, Equatable {
 /// Runs the upstream ccusage binary directly. It never launches CodeVetter,
 /// reads provider credentials, or sends usage data to a network endpoint.
 public struct CCUsageClient: Sendable {
-    public static let pinnedVersion = "20.0.20"
+    public static let pinnedVersion = "20.0.24"
     private let executableURL: URL?
     private let timeout: TimeInterval = 45
     private let outputLimit = 40 * 1024 * 1024
