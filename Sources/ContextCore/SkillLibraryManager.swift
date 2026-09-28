@@ -14,7 +14,8 @@ public struct SkillChangePlan: Identifiable, Sendable {
     fileprivate let files: [String: Data]
     fileprivate let source: String?
     fileprivate let permissions: [String: Int]
-    fileprivate enum Operation: Sendable { case create, edit, update, archive, link, unlink }
+    fileprivate var targetExpected: String? = nil
+    fileprivate enum Operation: Sendable { case create, edit, update, archive, link, unlink, move, consolidate, policy }
 }
 
 public struct SkillChangeReceipt: Identifiable, Codable, Sendable {
@@ -27,6 +28,9 @@ public struct SkillChangeReceipt: Identifiable, Codable, Sendable {
     public let kind: String
     public var restored: Bool
     public var completed: Bool
+    public var sourcePath: String? = nil
+    public var sourceFingerprint: String? = nil
+    public var resultingFolderFingerprint: String? = nil
 }
 
 public struct SkillManagementError: LocalizedError, Sendable {
@@ -106,6 +110,79 @@ public actor SkillLibraryManager {
             before: "", after: folder.path, fileChanges: ["New directory link"], operation: .link, expected: digest(Data(before.utf8)), files: [:], source: folder.path, permissions: [:]))
     }
 
+    /// Preserve the original route with a forwarding link, so discovered aliases keep resolving.
+    public func prepareMove(skill: URL, parent: URL) throws -> SkillChangePlan {
+        try editable(skill)
+        let source = skill.deletingLastPathComponent()
+        let destination = parent.appendingPathComponent(source.lastPathComponent)
+        try writable(destination)
+        guard !exists(destination), !destination.path.hasPrefix(source.path + "/") else {
+            throw failure("Choose an unoccupied destination outside the source skill.")
+        }
+        let expected = try folderFingerprint(source)
+        return remember(.init(id: UUID(), title: "Move skill and preserve access", destination: destination.path,
+            detail: "Moves the complete folder and leaves a forwarding link at the original location. Existing access remains; the destination may add discovery in its new scope. Relative references outside this folder may need adjustment. Undo is available in History.",
+            before: source.path, after: destination.path,
+            fileChanges: ["Move complete folder to: \(destination.path)", "Keep original access through a link: \(source.path)"],
+            operation: .move, expected: expected, files: [:], source: source.path, permissions: [:]))
+    }
+
+    public func prepareConsolidation(duplicate: URL, canonical: URL) throws -> SkillChangePlan {
+        try editable(duplicate); try editable(canonical)
+        if let reason = SkillConsolidationBoundary.reason(duplicate: duplicate, canonical: canonical) { throw failure(reason) }
+        let folder = duplicate.deletingLastPathComponent(), keep = canonical.deletingLastPathComponent()
+        guard folder != keep, !folder.path.hasPrefix(keep.path + "/"), !keep.path.hasPrefix(folder.path + "/") else {
+            throw failure("Choose two separate physical skill folders.")
+        }
+        let expected = try folderFingerprint(folder)
+        guard expected == (try folderFingerprint(keep)) else {
+            throw failure("Complete folders differ: instructions, support files, directory structure, or permissions. Review the differences before merging.")
+        }
+        var plan = SkillChangePlan(id: UUID(), title: "Consolidate identical skill folder", destination: folder.path,
+            detail: "All files and permissions match. Archives this copy and replaces it with a link to the chosen source. Existing agent routes stay in place. Future edits to the source affect every linked agent. Check any location-dependent scripts before applying. History can restore the independent copy.",
+            before: folder.path, after: keep.path, fileChanges: ["Keep source: \(keep.path)", "Archive copy and replace with link: \(folder.path)"],
+            operation: .consolidate, expected: expected, files: [:], source: keep.path, permissions: [:])
+        plan.targetExpected = expected
+        return remember(plan)
+    }
+
+    public func prepareInvocation(skill: URL, runtime: AgentRuntime, automatic: Bool) throws -> SkillChangePlan {
+        try editable(skill)
+        let folder = skill.deletingLastPathComponent()
+        var files = try tree(folder)
+        let edited = try SkillInvocationEditor.edit(files: files, runtime: runtime, automatic: automatic)
+        files = edited.files
+        var plan = try prepareInstall(destination: folder, files: files, update: true,
+                                      permissions: try filePermissions(folder, names: Array(try tree(folder).keys)))
+        let folderExpected = plan.targetExpected
+        // Use the regular whole-folder update and its guarded recovery path.
+        plan = SkillChangePlan(id: plan.id, title: "Set \(runtime.rawValue) invocation", destination: plan.destination,
+            detail: edited.explanation, before: edited.before, after: edited.after, fileChanges: plan.fileChanges,
+            operation: .policy, expected: plan.expected, files: plan.files, source: nil, permissions: plan.permissions)
+        plan.targetExpected = folderExpected
+        return remember(plan)
+    }
+
+    private func folderFingerprint(_ root: URL) throws -> String {
+        let files = try tree(root)
+        let permissions = try filePermissions(root, names: Array(files.keys))
+        var directoryEntries: [String] = []
+        guard let enumerator = fm.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey]) else {
+            throw failure("Cannot inspect folder structure.")
+        }
+        for case let url as URL in enumerator {
+            try safePath(url)
+            if try url.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true {
+                let mode = try fm.attributesOfItem(atPath: url.path)[.posixPermissions] as? NSNumber
+                directoryEntries.append("\(url.path.dropFirst(root.path.count)):d:\(mode?.intValue ?? 0)")
+            }
+        }
+        let rootMode = try fm.attributesOfItem(atPath: root.path)[.posixPermissions] as? NSNumber
+        directoryEntries.append(".:d:\(rootMode?.intValue ?? 0)")
+        let fileEntries = files.keys.sorted().map { "\($0):\(digest(files[$0]!)):\(permissions[$0] ?? 0)" }
+        return digest(Data((fileEntries + directoryEntries.sorted()).joined(separator: "\n").utf8))
+    }
+
     public func prepareUnlink(path: URL) throws -> SkillChangePlan {
         try writable(path.deletingLastPathComponent())
         guard try path.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true else {
@@ -127,10 +204,10 @@ public actor SkillLibraryManager {
         var result: String?
         // Persist intent before the first mutation. Interrupted operations remain visible
         // with their recovery location rather than silently losing their provenance.
-        let willBackUp = [.edit, .update, .archive, .unlink].contains(plan.operation)
+        let willBackUp = [.edit, .update, .policy, .archive, .unlink, .consolidate].contains(plan.operation)
         let intent = SkillChangeReceipt(id: plan.id, title: plan.title, destination: plan.destination, date: Date(),
             backupPath: willBackUp ? backup.path : nil, resultingFingerprint: nil,
-            kind: String(describing: plan.operation), restored: false, completed: false)
+            kind: String(describing: plan.operation), restored: false, completed: false, sourcePath: plan.source, sourceFingerprint: plan.targetExpected)
         try save(intent)
         switch plan.operation {
         case .edit:
@@ -140,14 +217,29 @@ public actor SkillLibraryManager {
             backupPath = backup.path
             try plan.files["SKILL.md"]!.write(to: destination, options: .atomic)
             result = digest(plan.files["SKILL.md"]!)
-        case .create, .update:
+        case .create, .update, .policy:
             try writable(destination)
-            if plan.operation == .update {
+            if plan.operation == .update || plan.operation == .policy {
                 guard fingerprint(try tree(destination)) == plan.expected else { throw failure("The folder changed since preview. Review the update again.") }
+                if let expected = plan.targetExpected, try folderFingerprint(destination) != expected {
+                    throw failure("The folder structure or permissions changed since preview. Review the update again.")
+                }
             } else if exists(destination) { throw failure("The destination appeared after preview. Nothing was overwritten.") }
             let stage = storage.appendingPathComponent("stage-\(plan.id)")
-            try writeTree(plan.files, to: stage, permissions: plan.permissions)
-            if plan.operation == .update {
+            if plan.operation == .policy {
+                // Keep empty folders, executable bits, and metadata when changing only policy files.
+                try fm.copyItem(at: destination, to: stage)
+                for (name, data) in plan.files {
+                    let file = stage.appendingPathComponent(name)
+                    if (try? Data(contentsOf: file)) == data { continue }
+                    try fm.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try data.write(to: file, options: .atomic)
+                    if let mode = plan.permissions[name] { try fm.setAttributes([.posixPermissions: mode], ofItemAtPath: file.path) }
+                }
+            } else {
+                try writeTree(plan.files, to: stage, permissions: plan.permissions)
+            }
+            if plan.operation == .update || plan.operation == .policy {
                 try fm.moveItem(at: destination, to: backup)
                 backupPath = backup.path
             }
@@ -173,14 +265,43 @@ public actor SkillLibraryManager {
             try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
             try fm.createSymbolicLink(at: destination, withDestinationURL: source)
             result = source.path
+        case .move:
+            try writable(destination)
+            let original = URL(fileURLWithPath: plan.source!)
+            try writable(original)
+            guard !exists(destination), try folderFingerprint(original) == plan.expected else {
+                throw failure("The source or destination changed since preview. Review the move again.")
+            }
+            try fm.createDirectory(at: destination.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try fm.moveItem(at: original, to: destination)
+            do { try fm.createSymbolicLink(at: original, withDestinationURL: destination) }
+            catch { try fm.moveItem(at: destination, to: original); throw error }
+            result = try folderFingerprint(destination)
+        case .consolidate:
+            try writable(destination)
+            let canonical = URL(fileURLWithPath: plan.source!)
+            try writable(canonical)
+            if let reason = SkillConsolidationBoundary.reason(
+                duplicate: destination.appendingPathComponent("SKILL.md"),
+                canonical: canonical.appendingPathComponent("SKILL.md")) { throw failure(reason) }
+            guard try folderFingerprint(destination) == plan.expected,
+                  try folderFingerprint(canonical) == plan.targetExpected else {
+                throw failure("A skill folder changed since preview. Compare the copies again.")
+            }
+            try fm.moveItem(at: destination, to: backup)
+            backupPath = backup.path
+            do { try fm.createSymbolicLink(at: destination, withDestinationURL: canonical) }
+            catch { try fm.moveItem(at: backup, to: destination); throw error }
+            result = canonical.path
         case .unlink:
             try writable(destination.deletingLastPathComponent())
             guard try fm.destinationOfSymbolicLink(atPath: destination.path) == plan.expected else { throw failure("The link changed since preview.") }
             try fm.moveItem(at: destination, to: backup)
             backupPath = backup.path
         }
+        let completeFolder = [.create, .update, .policy].contains(plan.operation) ? try folderFingerprint(destination) : nil
         let receipt = SkillChangeReceipt(id: plan.id, title: plan.title, destination: plan.destination, date: Date(),
-            backupPath: backupPath, resultingFingerprint: result, kind: String(describing: plan.operation), restored: false, completed: true)
+            backupPath: backupPath, resultingFingerprint: result, kind: String(describing: plan.operation), restored: false, completed: true, sourcePath: plan.source, sourceFingerprint: plan.targetExpected, resultingFolderFingerprint: completeFolder)
         try save(receipt)
         return receipt
     }
@@ -191,13 +312,37 @@ public actor SkillLibraryManager {
         let destination = URL(fileURLWithPath: receipt.destination)
         try writable(destination.deletingLastPathComponent())
         let displaced = storage.appendingPathComponent("replaced-\(UUID())")
+        if receipt.kind == "move" {
+            guard let originalPath = receipt.sourcePath else { throw failure("Missing original move location.") }
+            let original = URL(fileURLWithPath: originalPath)
+            try writable(destination)
+            try writable(original.deletingLastPathComponent())
+            guard try folderFingerprint(destination) == receipt.resultingFingerprint,
+                  try fm.destinationOfSymbolicLink(atPath: original.path) == destination.path else {
+                throw failure("The moved skill or its original link changed. Restore would overwrite newer work.")
+            }
+            try fm.moveItem(at: original, to: displaced)
+            do { try fm.moveItem(at: destination, to: original) }
+            catch { try fm.moveItem(at: displaced, to: original); throw error }
+            receipt.restored = true
+            try save(receipt)
+            return
+        }
         if receipt.kind == "archive" || receipt.kind == "unlink" {
             guard !exists(destination) else { throw failure("The original location is occupied. Move that item before restoring.") }
-        } else if receipt.kind == "link" {
+        } else if receipt.kind == "link" || receipt.kind == "consolidate" {
+            if receipt.kind == "consolidate", let canonical = receipt.sourcePath {
+                guard try folderFingerprint(URL(fileURLWithPath: canonical)) == receipt.sourceFingerprint else {
+                    throw failure("The shared source changed after consolidation. Restore would hide newer work at this location.")
+                }
+            }
             guard try fm.destinationOfSymbolicLink(atPath: destination.path) == receipt.resultingFingerprint else { throw failure("The link changed after this action.") }
             try fm.moveItem(at: destination, to: displaced)
         } else {
             try writable(destination)
+            if let expected = receipt.resultingFolderFingerprint, try folderFingerprint(destination) != expected {
+                throw failure("The folder structure or permissions changed after this action. Restore would overwrite newer work.")
+            }
             let current = receipt.kind == "edit" ? digest(Data(try document(destination).utf8)) : fingerprint(try tree(destination))
             guard current == receipt.resultingFingerprint else { throw failure("The skill changed after this action. Restore would overwrite newer work.") }
             try fm.moveItem(at: destination, to: displaced)
@@ -228,10 +373,12 @@ public actor SkillLibraryManager {
             if original[name] == files[name] { return nil }
             return "\(original[name] == nil ? "Added" : files[name] == nil ? "Removed" : "Modified"): \(name)"
         }
-        return remember(.init(id: UUID(), title: update ? "Update from folder" : "Install local skill", destination: destination.path,
+        var plan = SkillChangePlan(id: UUID(), title: update ? "Update from folder" : "Install local skill", destination: destination.path,
             detail: "\(files.count) files · \(added) added · \(changed) changed · \(removed) removed. \(update ? "The previous folder is retained for recovery. Existing links continue to point here." : "Imported scripts are not executed.")",
             before: original["SKILL.md"].flatMap { String(data: $0, encoding: .utf8) } ?? "", after: text, fileChanges: changes,
-            operation: update ? .update : .create, expected: update ? fingerprint(original) : nil, files: files, source: nil, permissions: permissions))
+            operation: update ? .update : .create, expected: update ? fingerprint(original) : nil, files: files, source: nil, permissions: permissions)
+        plan.targetExpected = update ? try folderFingerprint(destination) : nil
+        return remember(plan)
     }
 
     private func tree(_ root: URL) throws -> [String: Data] {
@@ -321,7 +468,7 @@ public actor SkillLibraryManager {
         digest(Data(files.keys.sorted().map { "\($0):\(digest(files[$0]!))" }.joined(separator: "\n").utf8))
     }
     private func remember(_ plan: SkillChangePlan) -> SkillChangePlan {
-        if plans.count > 20 { plans.removeAll() }
+        if plans.count > 2_000 { plans.removeAll() }
         plans[plan.id] = plan
         return plan
     }

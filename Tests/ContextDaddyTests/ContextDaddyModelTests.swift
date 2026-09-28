@@ -9,9 +9,9 @@ struct ContextDaddyModelTests {
         let model = ContextDaddyModel()
         #expect(model.section == .overview)
         #expect(model.visibleSkills.isEmpty)
-        #expect(AppSection.allCases == [.overview, .skills, .projects, .telemetry])
+        #expect(AppSection.allCases == [.overview, .skills, .memory, .projects, .telemetry])
         #expect(AppSection.overview.label == "Usage")
-        #expect(AppSection.telemetry.label == "OpenTelemetry")
+        #expect(AppSection.telemetry.label == "Agent activity")
         #expect(SkillsMode.ledger.rawValue == "Agent policies")
         #expect(!model.evidenceOpen)
         #expect(model.skillsMode == .library)
@@ -19,6 +19,11 @@ struct ContextDaddyModelTests {
         model.showEvidence(.diagnostics)
         #expect(model.evidenceOpen)
         #expect(model.sourcesMode == .diagnostics)
+        model.skillsMode = .plugins
+        model.pendingSkillRuntime = .claude
+        model.show(.skills)
+        #expect(model.skillsMode == .library)
+        #expect(model.pendingSkillRuntime == .claude)
         model.show(.telemetry)
         #expect(model.section == .telemetry)
         #expect(!model.evidenceOpen)

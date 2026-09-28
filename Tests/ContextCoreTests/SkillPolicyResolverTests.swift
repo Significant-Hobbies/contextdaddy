@@ -3,7 +3,7 @@ import Testing
 @testable import ContextCore
 
 struct SkillPolicyResolverTests {
-    @Test func portableManualPolicyAppliesAcrossRuntimes() throws {
+    @Test func claudeFrontmatterDoesNotDisableCodexImplicitInvocation() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let skill = root.appendingPathComponent(".agents/skills/manual/SKILL.md")
         try FileManager.default.createDirectory(at: skill.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -11,9 +11,12 @@ struct SkillPolicyResolverTests {
         defer { try? FileManager.default.removeItem(at: root) }
         let report = try AIContextDiscovery.discover(configuration: .init(home: root, projectRoots: [], additionalRoots: [root]))
         let record = try #require(SkillPolicyResolver.resolve(report: report).records.first)
-        #expect(record.policies.filter(\.isExposed).allSatisfy { $0.mode == .manualOnly })
+        #expect(record.policy(for: .codex)?.mode == .automatic)
+        #expect(record.policy(for: .codex)?.desiredMode == .manualOnly)
+        #expect(record.needsReview)
+        #expect(SkillOrganizationIndex.matching([record], runtime: .codex, invocation: .unverified, scope: nil, sort: .name, ascending: true, duplicateCounts: [:]).count == 1)
         #expect(record.policies.filter { !$0.isExposed }.allSatisfy { $0.mode == .unsupported })
-        #expect(record.policies.allSatisfy { $0.explicit })
+        #expect(record.policy(for: .codex)?.explicit == false)
     }
 
     @Test func codexRuntimeOverrideIsSpecific() throws {

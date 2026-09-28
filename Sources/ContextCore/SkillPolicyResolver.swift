@@ -77,8 +77,7 @@ public enum SkillPolicyResolver {
     ) -> SkillRuntimePolicy {
         let invocation = switch runtime {
         case .codex: "$\(name)"
-        case .claude, .cursor, .grok: "/\(name)"
-        case .devin: "@skills:\(name)"
+        case .claude, .cursor, .grok, .devin: "/\(name)"
         }
         let exposed = providers(activeProviders, expose: runtime)
         guard exposed else {
@@ -95,16 +94,31 @@ public enum SkillPolicyResolver {
             )
         }
 
-        if runtime == .codex, let implicit = codexImplicitPolicy(skillPath: physicalPath) {
-            return SkillRuntimePolicy(
-                runtime: runtime,
-                mode: implicit ? .automatic : .manualOnly,
-                explicit: true,
-                reason: implicit ? "agents/openai.yaml allows implicit invocation." : "agents/openai.yaml disables implicit invocation.",
-                invocation: invocation
-            )
+        if runtime == .codex {
+            switch codexImplicitPolicy(skillPath: physicalPath) {
+            case .value(let implicit):
+                return SkillRuntimePolicy(runtime: runtime, mode: implicit ? .automatic : .manualOnly, explicit: true,
+                    reason: implicit ? "agents/openai.yaml allows implicit invocation." : "agents/openai.yaml disables implicit invocation.", invocation: invocation)
+            case .unverified:
+                return SkillRuntimePolicy(runtime: runtime, mode: .unverified, explicit: false,
+                    reason: "The Codex policy file could not be safely resolved. Review agents/openai.yaml.", invocation: invocation)
+            case .unspecified:
+                return SkillRuntimePolicy(runtime: runtime, mode: .automatic, explicit: false,
+                    reason: "Codex defaults to implicit invocation. SKILL.md invocation flags for other agents do not disable it; use agents/openai.yaml.", invocation: invocation,
+                    desiredMode: metadata.disableModelInvocation == true ? .manualOnly : nil)
+            }
         }
 
+        if runtime == .devin {
+            let triggers = Set((metadata.triggers ?? ["user", "model"]).map { $0.lowercased() })
+            let mode: InvocationMode = triggers == ["user"] ? .manualOnly : triggers == ["model"] ? .modelOnly : triggers == ["user", "model"] ? .automatic : .unverified
+            return SkillRuntimePolicy(runtime: runtime, mode: mode, explicit: metadata.triggers != nil,
+                                      reason: metadata.triggers == nil ? "Devin defaults to user and model triggers." : "Devin invocation follows its triggers list; other agents’ frontmatter controls are separate.", invocation: invocation)
+        }
+        if runtime == .grok, let raw = metadata.rawUserInvocable, raw != "true" {
+            return SkillRuntimePolicy(runtime: runtime, mode: .disabled, explicit: true,
+                                      reason: "Grok hides this skill from both user and model because user-invocable is not literal true.", invocation: invocation)
+        }
         if metadata.disableModelInvocation == true {
             return SkillRuntimePolicy(
                 runtime: runtime,
@@ -125,15 +139,6 @@ public enum SkillPolicyResolver {
                 desiredMode: .modelOnly
             )
         }
-        if runtime == .devin, let triggers = metadata.triggers {
-            let normalized = Set(triggers.map { $0.lowercased() })
-            if normalized == ["user"] {
-                return SkillRuntimePolicy(runtime: runtime, mode: .manualOnly, explicit: true, reason: "Devin trigger metadata allows user invocation only.", invocation: invocation, desiredMode: .manualOnly)
-            }
-            if normalized == ["model"] {
-                return SkillRuntimePolicy(runtime: runtime, mode: .modelOnly, explicit: true, reason: "Devin trigger metadata allows model invocation only.", invocation: invocation, desiredMode: .modelOnly)
-            }
-        }
         return SkillRuntimePolicy(
             runtime: runtime,
             mode: .automatic,
@@ -153,17 +158,26 @@ public enum SkillPolicyResolver {
         }
     }
 
-    private static func codexImplicitPolicy(skillPath: String) -> Bool? {
-        let url = URL(fileURLWithPath: skillPath).deletingLastPathComponent()
-            .appendingPathComponent("agents/openai.yaml")
-        guard let text = try? BoundedTextReader.read(url: url, maximumBytes: 64 * 1024) else { return nil }
-        for line in text.split(separator: "\n") {
-            let clean = line.split(separator: "#", maxSplits: 1).first?.trimmingCharacters(in: .whitespaces) ?? ""
-            if clean.hasPrefix("allow_implicit_invocation:") {
-                return parseBool(String(clean.dropFirst("allow_implicit_invocation:".count)))
-            }
+    private enum CodexPolicy { case value(Bool), unspecified, unverified }
+    private static func codexImplicitPolicy(skillPath: String) -> CodexPolicy {
+        let url = URL(fileURLWithPath: skillPath).deletingLastPathComponent().appendingPathComponent("agents/openai.yaml")
+        guard FileManager.default.fileExists(atPath: url.path) else { return .unspecified }
+        guard let text = try? BoundedTextReader.read(url: url.resolvingSymlinksInPath(), maximumBytes: 64 * 1024) else { return .unverified }
+        let lines = text.components(separatedBy: "\n").map(stripYAMLComment)
+        guard !text.contains("<<:"), !text.contains("\t") else { return .unverified }
+        let policies = lines.indices.filter { lines[$0].hasPrefix("policy:") }
+        guard policies.count <= 1 else { return .unverified }
+        guard let start = policies.first else { return text.contains("allow_implicit_invocation") ? .unverified : .unspecified }
+        guard lines[start].trimmingCharacters(in: .whitespaces) == "policy:" else { return .unverified }
+        let end = lines.indices.dropFirst(start + 1).first { !lines[$0].trimmingCharacters(in: .whitespaces).isEmpty && !lines[$0].hasPrefix(" ") } ?? lines.count
+        let values = lines[(start + 1)..<end].filter { $0.hasPrefix("  allow_implicit_invocation:") }
+        guard values.count <= 1 else { return .unverified }
+        guard let value = values.first else { return .unspecified }
+        switch value.dropFirst("  allow_implicit_invocation:".count).trimmingCharacters(in: .whitespaces) {
+        case "true": return .value(true)
+        case "false": return .value(false)
+        default: return .unverified
         }
-        return nil
     }
 
     private static func readDocument(at url: URL) -> SkillDocumentMetadata {
@@ -185,7 +199,7 @@ public enum SkillPolicyResolver {
         var inTriggers = false
         var collectingDescription = false
         for line in lines.dropFirst() {
-            let trimmed = line.trimmingCharacters(in: .whitespacesAndNewlines)
+            let trimmed = stripYAMLComment(line).trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed == "---" { break }
             if collectingDescription, line.hasPrefix(" ") || line.hasPrefix("\t") {
                 if !trimmed.isEmpty {
@@ -210,7 +224,8 @@ public enum SkillPolicyResolver {
                 metadata.disableModelInvocation = parseBool(scalar(after: "disable-model-invocation:", in: trimmed))
                 inTriggers = false
             } else if trimmed.hasPrefix("user-invocable:") {
-                metadata.userInvocable = parseBool(scalar(after: "user-invocable:", in: trimmed))
+                metadata.rawUserInvocable = String(trimmed.dropFirst("user-invocable:".count)).trimmingCharacters(in: .whitespaces)
+                metadata.userInvocable = parseBool(metadata.rawUserInvocable ?? "")
                 inTriggers = false
             } else if trimmed.hasPrefix("triggers:") {
                 inTriggers = true
@@ -227,6 +242,19 @@ public enum SkillPolicyResolver {
             }
         }
         return metadata
+    }
+
+    private static func stripYAMLComment(_ line: String) -> String {
+        var quote: Character?, escaped = false
+        for index in line.indices {
+            let c = line[index]
+            if let current = quote {
+                if c == current && !escaped { quote = nil }
+                escaped = current == "\"" && c == "\\" && !escaped
+            } else if c == "\"" || c == "'" { quote = c }
+            else if c == "#", index == line.startIndex || line[line.index(before: index)].isWhitespace { return String(line[..<index]) }
+        }
+        return line
     }
 
     private static func scalar(after key: String, in line: String) -> String {
@@ -255,6 +283,7 @@ private struct Frontmatter {
     var name: String?
     var description: String?
     var disableModelInvocation: Bool?
+    var rawUserInvocable: String?
     var userInvocable: Bool?
     var triggers: [String]?
 }

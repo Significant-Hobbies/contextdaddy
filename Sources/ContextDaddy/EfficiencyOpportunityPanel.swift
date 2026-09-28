@@ -1,7 +1,9 @@
+import AppKit
 import ContextCore
 import SwiftUI
 
 struct EfficiencyOpportunityPanel: View {
+    @State private var showAll = false
     let title: String
     let sourceNote: String
     let opportunities: [EfficiencyOpportunity]
@@ -33,13 +35,13 @@ struct EfficiencyOpportunityPanel: View {
                         Array(repeating: GridItem(.flexible(minimum: 0), spacing: 10, alignment: .top), count: $0)
                     } ?? [GridItem(.adaptive(minimum: 300), spacing: 10, alignment: .top)],
                               alignment: .leading, spacing: 10) {
-                        ForEach(Array(opportunities.prefix(maxVisible))) { opportunity in
+                        ForEach(Array(opportunities.prefix(showAll ? opportunities.count : maxVisible))) { opportunity in
                             OpportunityRow(opportunity: opportunity)
                         }
                     }
                     if opportunities.count > maxVisible {
-                        Text("Showing \(maxVisible) of \(opportunities.count) ranked signals; Copy all includes the full set.")
-                            .font(.caption2).foregroundStyle(DaddyTheme.muted)
+                        Button(showAll ? "Show fewer signals" : "Show all \(opportunities.count) signals") { showAll.toggle() }
+                            .font(.caption)
                     }
                 }
             }.frame(maxWidth: .infinity, alignment: .leading)
@@ -63,6 +65,12 @@ private struct OpportunityRow: View {
                 expanded.toggle()
             }
             .font(.caption2)
+            if opportunity.id.hasPrefix("otel:") {
+            Button("Copy investigation brief", systemImage: "doc.on.doc") {
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.setString(IssueBriefFormatter.telemetry([opportunity]), forType: .string)
+            }.font(.caption2)
+            }
             if expanded {
                 Text(opportunity.evidence).font(.caption).foregroundStyle(DaddyTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)

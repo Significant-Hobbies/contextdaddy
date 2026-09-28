@@ -15,7 +15,7 @@ struct RootView: View {
                     .padding(.top, 18)
                     .padding(.bottom, 14)
                 VStack(spacing: 5) {
-                    ForEach(AppSection.allCases) { section in
+                    ForEach(AppSection.allCases.filter { $0 != .projects }) { section in
                         Button {
                             model.show(section)
                         } label: {
@@ -42,12 +42,12 @@ struct RootView: View {
                     .padding(.horizontal, 20)
                     .padding(.vertical, 12)
                 Button {
-                    model.showEvidence(model.configurationHealth.issues.isEmpty ? .inventory : .diagnostics)
+                    model.showEvidence(.diagnostics)
                 } label: {
                     HStack(spacing: 10) {
                         Image(systemName: "tray.full").frame(width: 18)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Files & diagnostics")
+                            Text("Diagnostics")
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.9)
                             if !model.configurationHealth.issues.isEmpty {
@@ -68,10 +68,13 @@ struct RootView: View {
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(model.evidenceOpen ? .isSelected : [])
                 .accessibilityLabel(model.configurationHealth.issues.isEmpty
-                    ? "Files and diagnostics"
-                    : "Files and diagnostics, \(model.configurationHealth.issues.count) configuration \(model.configurationHealth.issues.count == 1 ? "issue" : "issues")")
+                    ? "Diagnostics"
+                    : "Diagnostics, \(model.configurationHealth.issues.count) configuration \(model.configurationHealth.issues.count == 1 ? "issue" : "issues")")
                 .help("Discovered files and read-only configuration diagnostics")
                 .padding(.horizontal, 10)
+                Button("Project files & instructions") { model.show(.projects) }
+                    .font(.caption).buttonStyle(.plain).foregroundStyle(DaddyTheme.muted)
+                    .padding(.horizontal, 20).padding(.top, 12)
                 Spacer(minLength: 8)
                 PrivacyFooter()
                     .padding(16)
@@ -89,6 +92,7 @@ struct RootView: View {
                         switch model.section ?? .overview {
                         case .overview: LiveRunsView()
                         case .skills: SkillsLedgerView()
+                        case .memory: MemoryLibraryView()
                         case .projects: ProjectsContextView()
                         case .telemetry: TelemetryView()
                         }
@@ -140,7 +144,7 @@ private struct PrivacyFooter: View {
         VStack(alignment: .leading, spacing: 7) {
             Label("Local & redacted", systemImage: "lock.shield")
                 .font(.caption.weight(.semibold)).foregroundStyle(DaddyTheme.mint)
-            Text("No prompt bodies. No config writes. No claimed bandwidth without a sensor.")
+            Text("Local discovery. Document reads and changes are explicit. No prompt collection.")
                 .font(.caption2).foregroundStyle(DaddyTheme.muted).fixedSize(horizontal: false, vertical: true)
         }
     }
@@ -225,7 +229,7 @@ struct SourcesHubView: View {
                 Button {
                     Task { await model.refresh() }
                 } label: {
-                    Label(model.isLoading ? "Refreshing…" : "Refresh inventory", systemImage: "arrow.clockwise")
+                    Label(model.isLoading ? "Refreshing…" : model.sourcesMode == .diagnostics ? "Recheck setup" : "Refresh inventory", systemImage: "arrow.clockwise")
                 }
                 .disabled(model.isLoading)
             }
@@ -244,9 +248,15 @@ struct SourcesHubView: View {
 struct SkillsLedgerView: View {
     @Environment(ContextDaddyModel.self) private var model
 
-    var body: some View {
+    var body: some View { content }
+
+    @ViewBuilder private var content: some View {
         @Bindable var model = model
-        if model.skillsMode == .library {
+        if model.skillsMode == .plugins {
+            PluginInventoryView()
+        } else if model.skillsMode == .cleanup {
+            SkillCleanupWorkbench()
+        } else if model.skillsMode == .library {
             SkillLibraryView()
         } else {
         GeometryReader { proxy in
@@ -543,9 +553,12 @@ struct CoverageView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                ScreenHeader(eyebrow: "Evidence map", title: "What ContextDaddy can see", subtitle: "Bounded roots and adapter gaps are part of the product, not footnotes.", art: .overview)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Diagnostics").font(.title.bold())
+                    Text("Find broken agent setup, see its impact, and copy a fix to your agent.").foregroundStyle(DaddyTheme.muted)
+                }
                 HStack {
-                    Label(model.discoveryStatus, systemImage: model.isLoading ? "arrow.triangle.2.circlepath" : "checkmark.circle")
+                    Label(model.discoveryStatus, systemImage: model.isLoading ? "arrow.triangle.2.circlepath" : model.discoveryReport == nil ? "questionmark.circle" : "checkmark.circle")
                         .font(.caption).foregroundStyle(model.isLoading ? DaddyTheme.blue : DaddyTheme.muted)
                     Spacer()
                     Button("Add folder…", systemImage: "folder.badge.plus", action: addFolders)
@@ -553,8 +566,9 @@ struct CoverageView: View {
                 if model.isLoading {
                     RefreshContinuityBanner(started: model.loadStarted, hasPreviousResults: model.discoveryReport != nil)
                 }
-                ConfigurationHealthView(report: model.configurationHealth)
+                AgentDiagnosticsView()
                 if let catalog = model.catalog {
+                    DisclosureGroup("Scan coverage and evidence") {
                     LazyVGrid(
                         columns: Array(repeating: GridItem(.flexible(minimum: 120), spacing: 10), count: 4),
                         spacing: 10
@@ -626,8 +640,11 @@ struct CoverageView: View {
                                 .font(.caption).foregroundStyle(DaddyTheme.muted).fixedSize(horizontal: false, vertical: true)
                         }.frame(maxWidth: .infinity, alignment: .leading)
                     }
-                } else {
+                    }
+                } else if model.isLoading {
                     ProgressView("Scanning bounded local roots…").padding(40)
+                } else {
+                    Text("Use Recheck setup to scan supported local configuration.").font(.caption).foregroundStyle(DaddyTheme.muted)
                 }
             }
             .padding(28)

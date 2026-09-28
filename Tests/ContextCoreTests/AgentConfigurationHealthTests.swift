@@ -27,7 +27,7 @@ struct AgentConfigurationHealthTests {
         #expect(report.errorCount == 1)
         #expect(report.issues.contains { $0.id.contains("approvals_reviewer") && $0.line == 3 })
         #expect(report.issues.contains { $0.id.contains("personality") && $0.line == 4 })
-        #expect(report.issues.contains { $0.title.contains("spacefast") && $0.line == 7 })
+        #expect(report.issues.contains { $0.title == "MCP launcher not found" && $0.line == 7 })
     }
 
     @Test func acceptsTopLevelKeysAvailableCommandsAndDisabledServers() throws {

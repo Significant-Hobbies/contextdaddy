@@ -1,3 +1,4 @@
+import AppKit
 import ContextCore
 import SwiftUI
 
@@ -12,35 +13,55 @@ struct TelemetryView: View {
             let compact = proxy.size.width < 850 || proxy.size.height < 700
             ScrollView {
                 VStack(alignment: .leading, spacing: compact ? 13 : 19) {
-                    ScreenHeader(
-                        eyebrow: "OpenTelemetry · last 24 hours",
-                        title: "Live agent activity",
-                        subtitle: "Codex and Claude signals from the local collector. These readings are separate from usage history.",
-                        art: .telemetry,
-                        compact: compact
-                    )
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Agent activity").font(.title.bold())
+                        Text("See what ran, where tokens went, and what to review next.")
+                            .foregroundStyle(DaddyTheme.muted)
+                    }
 
                     ViewThatFits(in: .horizontal) {
                         HStack(spacing: 12) {
                             agentPicker
                             Spacer(minLength: 8)
-                            refreshButton
+                            if [.codex, .claude].contains(model.selectedTelemetryRuntime) { refreshButton }
                         }
                         VStack(alignment: .leading, spacing: 10) {
                             agentPicker
-                            refreshButton
+                            if [.codex, .claude].contains(model.selectedTelemetryRuntime) { refreshButton }
                         }
                     }
 
+                    ActivityAnswersView(runtime: model.selectedTelemetryRuntime)
+                    DisclosureGroup("Recorded history and local source files") {
+                        AgentRecordedActivityView(runtime: model.selectedTelemetryRuntime)
+                    }
+                    Text("Live signals · separate last-24-hour source").font(.headline)
+                    Text("The folder and history filters above do not filter these aggregate signals. No per-folder trace attribution is supplied.").font(.caption).foregroundStyle(DaddyTheme.muted)
+
+                    if [.codex, .claude].contains(model.selectedTelemetryRuntime) {
                     connectionStatus
 
                     if model.telemetry.collectorReachable && model.selectedTelemetryRuntime == .claude && !selectedAgentConnected {
                         missingClaudeTelemetry
-                    } else if model.telemetry.collectorReachable {
+                    } else if model.telemetry.collectorReachable && selectedAgentConnected {
                         OTelDashboardView(snapshot: model.telemetry, runtime: model.selectedTelemetryRuntime)
+                    } else {
+                        Panel {
+                            VStack(alignment: .leading, spacing: 10) {
+                                Text("Activity is not available yet").font(.headline)
+                                Text("Connect the selected agent to the local collector, run a task, then check again. Missing telemetry does not mean the agent is idle.")
+                                    .font(.callout).foregroundStyle(DaddyTheme.muted)
+                                Button("Copy connection checklist", systemImage: "doc.on.doc", action: copyConnectionChecklist)
+                                Button("Open recorded usage") { model.show(.overview) }
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                        }
                     }
 
-                    Panel {
+                    } else {
+                        Text("Live traces are not available for \(model.selectedTelemetryRuntime.rawValue) in this adapter. Recorded activity above is independent of the OTEL collector.")
+                            .font(.caption).foregroundStyle(DaddyTheme.muted)
+                    }
+                    DisclosureGroup("How to interpret this data") {
                         VStack(alignment: .leading, spacing: 6) {
                             Label("What this view cannot prove", systemImage: "info.circle")
                                 .font(.headline)
@@ -60,11 +81,30 @@ struct TelemetryView: View {
         }
     }
 
+    private func copyConnectionChecklist() {
+        let runtime = model.selectedTelemetryRuntime.rawValue
+        let brief = """
+        ContextDaddy activity connection check: \(runtime)
+        Checked: \(model.telemetry.generatedAt.formatted())
+        Local collector reachable: \(model.telemetry.collectorReachable)
+        Selected agent data verified: \(selectedAgentConnected)
+        Read-only endpoint: http://127.0.0.1:3000
+
+        1. Check whether the user's existing local telemetry stack is running and its read-only endpoint responds.
+        2. Inspect the selected agent's telemetry export status using its current official documentation. Do not borrow another agent's metrics.
+        3. Identify the missing connection and propose the exact change. Do not edit credentials, launch settings or configuration without user review.
+        4. After an approved repair, run a representative task and use Check telemetry in ContextDaddy. Verify new data for this agent, not only collector reachability.
+        Claude tool/API events and non-Codex session traces are not supported by this adapter. Missing telemetry is not zero usage.
+        """
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(brief, forType: .string)
+    }
+
     private var agentPicker: some View {
         ContextChoiceMenu(
             title: "Agent",
             selection: Bindable(model).selectedTelemetryRuntime,
-            choices: [AgentRuntime.codex, .claude].map { ContextChoice($0, $0.rawValue) },
+            choices: AgentRuntime.allCases.map { ContextChoice($0, $0.rawValue) },
             width: 180
         )
     }
@@ -95,6 +135,7 @@ struct TelemetryView: View {
                     .font(.caption)
                     .foregroundStyle(DaddyTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
+                Button("Copy connection checklist", systemImage: "doc.on.doc", action: copyConnectionChecklist)
                 Button("Open Usage history", systemImage: "chart.bar.xaxis") {
                     model.usageService = .claude
                     model.show(.overview)
@@ -107,17 +148,17 @@ struct TelemetryView: View {
 
     private var connectionStatus: some View {
         let collectorReachable = model.telemetry.collectorReachable
-        let claudeMissing = collectorReachable && model.selectedTelemetryRuntime == .claude && !selectedAgentConnected
+        let claudeMissing = collectorReachable && !selectedAgentConnected
         return Panel(padding: 14) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: collectorReachable && !claudeMissing ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                     .foregroundStyle(collectorReachable && !claudeMissing ? DaddyTheme.mint : DaddyTheme.amber)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(claudeMissing ? "Collector reachable · Claude data unavailable" :
+                    Text(claudeMissing ? "Collector reachable · \(model.selectedTelemetryRuntime.rawValue) data unavailable" :
                          collectorReachable ? "Local OTEL source reachable" : "Local OTEL source unavailable")
                         .font(.subheadline.weight(.semibold))
                     Text(claudeMissing
-                         ? "No verified Claude Code OTLP metrics were returned. Codex telemetry can be available while Claude telemetry is not."
+                         ? "The collector responded, but this agent has no verified data. Other agents may have different coverage."
                          : collectorReachable
                          ? "Last checked \(model.telemetry.generatedAt.formatted(date: .abbreviated, time: .shortened)). Codex and Claude evidence may still differ."
                          : "ContextDaddy cannot reach its read-only local telemetry endpoint at 127.0.0.1:3000. Start or repair the local stack, then check again. No activity is inferred from this outage.")

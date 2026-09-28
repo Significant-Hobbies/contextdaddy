@@ -96,7 +96,7 @@ public struct SkillRecord: Identifiable, Codable, Sendable, Equatable {
         self.definitionConflictCount = definitionConflictCount
     }
 
-    public var needsReview: Bool { policies.contains { $0.mode == .unverified } }
+    public var needsReview: Bool { policies.contains { $0.mode == .unverified || ($0.desiredMode != nil && $0.desiredMode != $0.mode) } }
     public var manualOnlyCount: Int { policies.filter { $0.mode == .manualOnly }.count }
     public var automaticCount: Int { policies.filter { $0.mode == .automatic }.count }
     public var exposedRuntimes: [AgentRuntime] { policies.filter(\.isExposed).map(\.runtime) }

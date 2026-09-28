@@ -14,18 +14,16 @@ struct OTelDashboardView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("\(runtime == .claude ? "Claude" : "Codex") live telemetry").font(.title3.bold())
-                    Text(agent?.source ?? "No verified local OpenTelemetry source is reachable")
-                        .font(.caption).foregroundStyle(DaddyTheme.muted)
-                }
-                Spacer()
-                EvidenceBadge(quality: agent?.connected == true ? .derived : .unavailable)
+            Text("\(runtime.rawValue) · " + (runtime == .codex ? "\(runs.count) recorded \(runs.count == 1 ? "session" : "sessions") · " : "") + "\(EfficiencyOpportunityAnalyzer.telemetry(snapshot: snapshot, runtime: runtime).count) review signals")
+                .font(.headline)
+            Text(runtime == .claude ? "Session traces and tool/API events are not available for Claude in this adapter." : "Recorded sessions reflect returned traces, not every task you ran. Review signals describe aggregates, not a failure diagnosis for a specific run.")
+                .font(.caption).foregroundStyle(DaddyTheme.muted)
+            if runtime == .codex {
+                RecentRunsPanel(runs: runs, collectorReachable: snapshot.collectorReachable)
             }
 
             EfficiencyOpportunityPanel(
-                title: "Telemetry review signals",
+                title: "What needs attention",
                 sourceNote: "Observed last-24-hour events, with limits kept visible.",
                 opportunities: EfficiencyOpportunityAnalyzer.telemetry(snapshot: snapshot, runtime: runtime),
                 columnCount: 1,
@@ -35,6 +33,7 @@ struct OTelDashboardView: View {
                     .font(.caption2).foregroundStyle(DaddyTheme.amber)
             }
 
+            DisclosureGroup("Measurements and breakdowns") {
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 185), spacing: 12)], spacing: 12) {
                 ForEach(TelemetrySignal.allCases) { signal in
                     if let value = agent?.signals[signal] {
@@ -52,18 +51,15 @@ struct OTelDashboardView: View {
                 }
             }
 
-            if runtime == .codex {
-                RecentRunsPanel(runs: runs, collectorReachable: snapshot.collectorReachable)
-            }
-
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 260), spacing: 12, alignment: .top)], alignment: .leading, spacing: 12) {
                 ForEach(sections) { section in
                     BreakdownPanel(section: section)
                 }
             }
 
+            }
             if snapshot.collectorReachable && runtime == .codex {
-                Panel {
+                DisclosureGroup("Source notes") {
                     VStack(alignment: .leading, spacing: 8) {
                         Label("Interpretation boundaries", systemImage: "ruler")
                             .font(.headline).foregroundStyle(DaddyTheme.amber)
@@ -95,7 +91,7 @@ private struct RecentRunsPanel: View {
             VStack(alignment: .leading, spacing: 12) {
                 HStack {
                     VStack(alignment: .leading, spacing: 3) {
-                        Text("Recent Tempo sessions").font(.headline)
+                        Text("Recent recorded runs").font(.headline)
                         Text("Root-session traces from the last 24 hours. Finished spans can arrive after a run ends.")
                             .font(.caption).foregroundStyle(DaddyTheme.muted)
                     }
@@ -111,6 +107,17 @@ private struct RecentRunsPanel: View {
                             runRow(run, compact: false)
                             runRow(run, compact: true)
                         }
+                        DisclosureGroup("Run evidence and investigation") {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("Trace ID: " + run.traceID).font(.caption.monospaced()).textSelection(.enabled)
+                                Text("The source supplies timing and span count, but no verified task name, project, outcome or per-run failure attribution.")
+                                    .font(.caption).foregroundStyle(DaddyTheme.muted)
+                                Button("Copy run investigation", systemImage: "doc.on.doc") {
+                                    NSPasteboard.general.clearContents()
+                                    NSPasteboard.general.setString("Investigate this recorded Codex trace in the existing local telemetry stack. Trace ID: \(run.traceID). Started: \(run.startedAt.formatted()). Root service: \(run.rootService). Operation: \(run.rootOperation). Duration: \(run.durationMilliseconds) ms. Spans: \(run.spanCount). Establish the task, outcome and any errors from trace evidence. Do not attribute aggregate 24-hour failures to this run without correlation; ContextDaddy has not verified its outcome.", forType: .string)
+                                }.font(.caption)
+                            }.padding(.top, 6)
+                        }.font(.caption)
                         if run.id != runs.prefix(expanded ? 20 : 5).last?.id { Divider().overlay(DaddyTheme.line) }
                     }
                     if runs.count > 5 {
@@ -127,24 +134,24 @@ private struct RecentRunsPanel: View {
             if compact {
                 VStack(alignment: .leading, spacing: 6) {
                     HStack(spacing: 8) {
-                        Circle().fill(DaddyTheme.mint).frame(width: 7, height: 7)
+                        Circle().fill(DaddyTheme.blue).frame(width: 7, height: 7)
                         Text(run.startedAt.formatted(date: .abbreviated, time: .standard))
                             .font(.subheadline.weight(.semibold))
                         Spacer()
                         Text(duration(run.durationMilliseconds)).font(.caption.monospacedDigit())
                     }
-                    Text("\(run.rootService) · \(run.rootOperation) · \(run.traceID)")
+                    Text("\(run.rootService) · \(run.rootOperation)")
                         .font(.caption2.monospaced()).foregroundStyle(DaddyTheme.muted)
                         .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
                     Text("\(run.spanCount) spans").font(.caption2).foregroundStyle(DaddyTheme.muted)
                 }
             } else {
                 HStack(spacing: 12) {
-                            Circle().fill(DaddyTheme.mint).frame(width: 7, height: 7)
+                            Circle().fill(DaddyTheme.blue).frame(width: 7, height: 7)
                             VStack(alignment: .leading, spacing: 3) {
                                 Text(run.startedAt.formatted(date: .abbreviated, time: .standard))
                                     .font(.subheadline.weight(.semibold))
-                                Text("\(run.rootService) · \(run.rootOperation) · \(run.traceID)")
+                                Text("\(run.rootService) · \(run.rootOperation)")
                                     .font(.caption2.monospaced()).foregroundStyle(DaddyTheme.muted)
                                     .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
                             }

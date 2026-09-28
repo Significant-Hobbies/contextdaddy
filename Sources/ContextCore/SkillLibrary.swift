@@ -8,7 +8,7 @@ public enum SkillOwnership: String, CaseIterable, Sendable {
     public static func classify(path: String) -> Self {
         let parts = URL(fileURLWithPath: path).standardizedFileURL.pathComponents
         if parts.contains("plugins") && parts.contains("cache") { return .plugin }
-        if parts.contains(".system") || path.hasPrefix("/etc/") || path.hasPrefix("/Library/") { return .system }
+        if parts.contains(".system") || parts.contains("synced") || parts.contains(".synced") || path.hasPrefix("/Applications/") || path.hasPrefix("/etc/") || path.hasPrefix("/Library/") { return .system }
         return .local
     }
 }
