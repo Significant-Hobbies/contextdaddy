@@ -77,7 +77,9 @@ struct SkillLibraryView: View {
     private var pageCount: Int { max(1, (results.count + 7) / 8) }
     private var visible: [SkillRecord] { Array(results.dropFirst(min(page, pageCount - 1) * 8).prefix(8)) }
 
-    var body: some View {
+    var body: some View { libraryDialogs }
+
+    private var libraryLayout: some View {
         GeometryReader { geometry in
             // Legacy scrollers reserve layout space; overlay scrollers do not.
             let scrollbarWidth = NSScroller.preferredScrollerStyle == .legacy
@@ -128,6 +130,10 @@ struct SkillLibraryView: View {
             }
             }
         }
+    }
+
+    private var libraryLifecycle: some View {
+        libraryLayout
         .onAppear {
             if let requested = model.pendingSkillRuntime {
                 if model.pendingSkillAllFolders { workingFolder = ""; model.skillFolderContext = nil }
@@ -152,6 +158,10 @@ struct SkillLibraryView: View {
                 await refreshLibrary()
             }
         }
+    }
+
+    private var libraryIndexUpdates: some View {
+        libraryLifecycle
         .onChange(of: agent) { _, value in if let value { model.selectedTelemetryRuntime = value } }
         .onChange(of: records, initial: true) { _, _ in
             sourceAudit = nil
@@ -179,6 +189,10 @@ struct SkillLibraryView: View {
         .onChange(of: favoriteOnly) { _, _ in resetPage() }
         .onChange(of: unresolvedSourcesOnly) { _, _ in resetPage() }
         .onChange(of: selection?.id) { _, _ in document = nil; tab = "Overview" }
+    }
+
+    private var libraryDialogs: some View {
+        libraryIndexUpdates
         .sheet(item: $plan) { pending in changePreview(pending) }
         .sheet(isPresented: $editor) { contentEditor }
         .sheet(item: $sharingSkill) { skill in
