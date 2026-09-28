@@ -301,7 +301,7 @@ struct SkillCleanupWorkbench: View {
                 if let canonical = recommendation.canonicalID {
                     Text("Keep source: \(short(canonical))").font(.caption.monospaced()).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
                 }
-                Text("Invocation: " + Set(recommendation.records.flatMap { record in record.policies.filter { record.exposedRuntimes.contains($0.runtime) } }.map { $0.runtime.rawValue + " · " + $0.mode.rawValue }).sorted().joined(separator: "; "))
+                Text("Invocation: \(invocationSummary(for: recommendation))")
                     .font(.caption).foregroundStyle(DaddyTheme.muted).fixedSize(horizontal: false, vertical: true)
                 HStack {
                     Button(recommendation.action == .managed ? "Inspect plugin ownership" : (recommendation.action == .consolidate ? "Preview consolidation" : recommendation.action == .scope ? "Review access change" : "Compare sources")) { selected = recommendation }
@@ -313,6 +313,17 @@ struct SkillCleanupWorkbench: View {
 
     private func saveKept() { UserDefaults.standard.set(Array(kept).sorted(), forKey: "skillCleanupKeptDecisions"); page = 0 }
     private func short(_ path: String) -> String { path.replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~") }
+
+    private func invocationSummary(for recommendation: SkillCleanupRecommendation) -> String {
+        var labels = Set<String>()
+        for record in recommendation.records {
+            let exposed = Set(record.exposedRuntimes)
+            for policy in record.policies where exposed.contains(policy.runtime) {
+                labels.insert(policy.runtime.rawValue + " · " + policy.mode.rawValue)
+            }
+        }
+        return labels.sorted().joined(separator: "; ")
+    }
 
     private func stopScan(message: String) {
         generation = UUID()
