@@ -178,6 +178,32 @@ struct SkillLibraryView: View {
     }
 
     private var libraryIndexUpdates: some View {
+        libraryActivityUpdates
+        .onChange(of: model.skillActivity?.scannedAt) { _, _ in rebuildIndex() }
+        .onChange(of: selection?.id) { _, _ in document = nil; tab = "Overview" }
+    }
+
+    private var libraryActivityUpdates: some View {
+        libraryFilterUpdates
+        .onChange(of: activityWindow) { _, _ in resetPage() }
+        .onChange(of: activityFilter) { _, _ in resetPage() }
+    }
+
+    private var libraryFilterUpdates: some View {
+        libraryRecordUpdates
+        .onChange(of: invocationFilter) { _, _ in resetPage() }
+        .onChange(of: scopeFilter) { _, _ in resetPage() }
+        .onChange(of: sortField) { _, _ in resetPage() }
+        .onChange(of: ascending) { _, _ in resetPage() }
+        .onChange(of: query) { _, _ in resetPage() }
+        .onChange(of: ownership) { _, _ in resetPage() }
+        .onChange(of: agent) { _, _ in resetPage() }
+        .onChange(of: location) { _, _ in resetPage() }
+        .onChange(of: favoriteOnly) { _, _ in resetPage() }
+        .onChange(of: unresolvedSourcesOnly) { _, _ in resetPage() }
+    }
+
+    private var libraryRecordUpdates: some View {
         libraryLifecycle
         .onChange(of: agent) { _, value in if let value { model.selectedTelemetryRuntime = value } }
         .onChange(of: records, initial: true) { _, _ in
@@ -195,20 +221,6 @@ struct SkillLibraryView: View {
         }
         .onChange(of: favorites) { _, _ in rebuildIndex() }
         .onChange(of: tags) { _, _ in rebuildIndex() }
-        .onChange(of: invocationFilter) { _, _ in resetPage() }
-        .onChange(of: scopeFilter) { _, _ in resetPage() }
-        .onChange(of: sortField) { _, _ in resetPage() }
-        .onChange(of: ascending) { _, _ in resetPage() }
-        .onChange(of: query) { _, _ in resetPage() }
-        .onChange(of: ownership) { _, _ in resetPage() }
-        .onChange(of: agent) { _, _ in resetPage() }
-        .onChange(of: location) { _, _ in resetPage() }
-        .onChange(of: favoriteOnly) { _, _ in resetPage() }
-        .onChange(of: unresolvedSourcesOnly) { _, _ in resetPage() }
-        .onChange(of: activityWindow) { _, _ in resetPage() }
-        .onChange(of: activityFilter) { _, _ in resetPage() }
-        .onChange(of: model.skillActivity?.scannedAt) { _, _ in rebuildIndex() }
-        .onChange(of: selection?.id) { _, _ in document = nil; tab = "Overview" }
     }
 
     private var libraryDialogs: some View {
