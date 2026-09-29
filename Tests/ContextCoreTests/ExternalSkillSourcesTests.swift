@@ -1,8 +1,47 @@
+import CryptoKit
 import Foundation
 import Testing
 @testable import ContextCore
 
 struct ExternalSkillSourcesTests {
+    @Test func verifiedReceiptRequiresTheAuditedFileDigest() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let skill = folder.appendingPathComponent("SKILL.md")
+        let text = "---\nname: archify\n---\nverified body"
+        try text.write(to: skill, atomically: true, encoding: .utf8)
+        let digest = SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+        let receiptFile = folder.appendingPathComponent("receipts.json")
+        let receipt: [String: Any] = ["schema": 1, "sources": [[
+            "repository": "https://github.com/tt-a1i/archify", "revision": "test-commit",
+            "evidence": "exact SKILL.md", "digests": [digest]
+        ]]]
+        try JSONSerialization.data(withJSONObject: receipt).write(to: receiptFile)
+        let sources = VerifiedSkillSources(fileURL: receiptFile)
+        #expect(sources.lookup(skillPath: folder.path)?.kind == .verified)
+        #expect(sources.lookup(skillPath: folder.path)?.sourceURL == "https://github.com/tt-a1i/archify")
+        try (text + "\nlocal edit").write(to: skill, atomically: true, encoding: .utf8)
+        #expect(sources.lookup(skillPath: folder.path) == nil)
+
+        var unsafe = receipt
+        unsafe["sources"] = [["repository": "https://token@github.com/tt-a1i/archify",
+            "revision": "test", "evidence": "untrusted", "digests": [digest]]]
+        try JSONSerialization.data(withJSONObject: unsafe).write(to: receiptFile)
+        #expect(VerifiedSkillSources(fileURL: receiptFile).lookup(skillPath: folder.path) == nil)
+
+        let tool: [String: Any] = ["schema": 1, "sources": [[
+            "sourceType": "tool", "owner": "Example CLI", "revision": "v1",
+            "evidence": "bundled skill matches", "digests": [digest]
+        ]]]
+        try JSONSerialization.data(withJSONObject: tool).write(to: receiptFile)
+        try text.write(to: skill, atomically: true, encoding: .utf8)
+        let bundled = VerifiedSkillSources(fileURL: receiptFile).lookup(skillPath: folder.path)
+        #expect(bundled?.kind == .tool)
+        #expect(bundled?.owner == "Example CLI")
+        #expect(bundled?.sourceURL == nil)
+    }
+
     @Test func requiresMatchingPhysicalPathAndSafeRepositoryURL() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let a = root.appendingPathComponent("a/skills/example")

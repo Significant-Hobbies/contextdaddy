@@ -428,9 +428,11 @@ struct SkillLibraryView: View {
                 if let sourceAudit {
                     let values = local.compactMap { sourceAudit.byPath[$0.id] }
                     let tracked = values.filter { $0.kind == .github }.count
+                    let verified = values.filter { $0.kind == .verified }.count
+                    let toolOwned = values.filter { $0.kind == .tool }.count
                     let repository = values.filter { $0.kind == .repository }.count
                     let unresolved = values.filter { $0.kind == .unresolved }.count
-                    Text("\(tracked) tracked by Vercel skills · \(repository) in Git repositories · \(unresolved) source unresolved")
+                    Text("\(tracked) tracked by Vercel skills · \(verified) verified GitHub sources · \(toolOwned) tool owned · \(repository) in Git repositories · \(unresolved) source unresolved")
                         .font(.callout).fixedSize(horizontal: false, vertical: true)
                     Text("Unresolved includes locally authored skills. It is a review queue, not a removal recommendation.")
                         .font(.caption).foregroundStyle(DaddyTheme.muted)

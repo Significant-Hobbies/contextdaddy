@@ -3,6 +3,8 @@ import Foundation
 public struct ExternalSkillSourceEvidence: Sendable, Equatable {
     public enum Kind: String, Sendable {
         case github = "GitHub source recorded"
+        case verified = "GitHub source verified"
+        case tool = "Installed tool source"
         case repository = "Tracked in local repository"
         case plugin = "Plugin owned"
         case unresolved = "Source unresolved"
@@ -42,10 +44,13 @@ public struct ExternalSkillSources: Sendable {
         let skillsProject = try? await Self.run(tool: "npx", arguments: ["--yes", "skills@1.7.0", "list", "--json"], folder: folder)
         let unavailable = (asm == nil ? ["ASM"] : []) + (skillsGlobal == nil || skillsProject == nil ? ["Vercel skills"] : [])
         var evidenceByPath: [String: ExternalSkillSourceEvidence] = [:]
+        let verifiedSources = VerifiedSkillSources()
         for path in skillPaths {
             var evidence = Self.resolve(skillPath: path, asm: asm ?? Data(), skillsLists: [skillsGlobal ?? Data(), skillsProject ?? Data()])
             if evidence.kind == .unresolved {
-                if let repository = await Self.repositorySource(skillPath: path) {
+                if let verified = verifiedSources.lookup(skillPath: path) {
+                    evidence = verified
+                } else if let repository = await Self.repositorySource(skillPath: path) {
                     evidence = repository
                 } else if !unavailable.isEmpty {
                     evidence = ExternalSkillSourceEvidence(kind: .unresolved,
