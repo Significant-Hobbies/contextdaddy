@@ -66,24 +66,7 @@ public enum SkillRedundancyAnalyzer {
         let records = records.sorted { $0.id < $1.id }
         var findings: [SkillRedundancyFinding] = []
 
-        let exactGroups = Dictionary(grouping: records.compactMap { record in
-            record.contentFingerprint.map { ($0, record) }
-        }, by: { $0.0 })
-        for (fingerprint, entries) in exactGroups where entries.count > 1 {
-            let group = entries.map(\.1)
-            findings.append(makeFinding(
-                kind: .exactCopy,
-                confidence: .high,
-                score: 1,
-                records: group,
-                affectedRuntimes: runtimeUnion(group),
-                evidence: [
-                    "Byte-identical bounded SKILL.md content (SHA-256 \(fingerprint.prefix(10))…).",
-                    exposureEvidence(group),
-                ],
-                duplicateBytes: duplicateBytes(group)
-            ))
-        }
+        findings.append(contentsOf: exactCopyFindings(records: records))
 
         let namedGroups = Dictionary(grouping: records, by: { normalizedName($0.name) })
         for (name, group) in namedGroups where !name.isEmpty && group.count > 1 {
@@ -117,6 +100,35 @@ public enum SkillRedundancyAnalyzer {
             return $0.id < $1.id
         }
         return SkillRedundancySummary(findings: findings)
+    }
+
+    /// Cleanup only needs exact instruction groups; avoid semantic comparison on sheet renders.
+    public static func exactCopyFindings(records: [SkillRecord]) -> [SkillRedundancyFinding] {
+        var findings: [SkillRedundancyFinding] = []
+        let exactGroups = Dictionary(grouping: records.compactMap { record in
+            record.contentFingerprint.map { ($0, record) }
+        }, by: { $0.0 })
+        for (fingerprint, entries) in exactGroups where entries.count > 1 {
+            let group = entries.map(\.1)
+            findings.append(makeFinding(
+                kind: .exactCopy,
+                confidence: .high,
+                score: 1,
+                records: group,
+                affectedRuntimes: runtimeUnion(group),
+                evidence: [
+                    "Byte-identical bounded SKILL.md content (SHA-256 \(fingerprint.prefix(10))…).",
+                    exposureEvidence(group),
+                ],
+                duplicateBytes: duplicateBytes(group)
+            ))
+        }
+
+        return findings.sorted {
+            if $0.isManagedCacheOnly != $1.isManagedCacheOnly { return !$0.isManagedCacheOnly }
+            if $0.members.count != $1.members.count { return $0.members.count > $1.members.count }
+            return $0.id < $1.id
+        }
     }
 
     private static func semanticFindings(records: [SkillRecord]) -> [SkillRedundancyFinding] {

@@ -1,4 +1,5 @@
 import Foundation
+import CryptoKit
 
 public enum ConfigurationIssueSeverity: String, Sendable, Equatable {
     case warning = "Warning"
@@ -36,15 +37,33 @@ public struct ConfigurationHealthIssue: Identifiable, Sendable, Equatable {
     }
 }
 
+public struct ConfigurationFileCheck: Identifiable, Sendable, Equatable {
+    public enum Status: String, Sendable { case checked = "Checked", missing = "Not present", unverified = "Not checked" }
+    public let runtime: AgentRuntime
+    public let path: String
+    public let status: Status
+    public let detail: String
+    public var id: String { runtime.rawValue + path }
+}
+
 public struct ConfigurationHealthReport: Sendable, Equatable {
     public let issues: [ConfigurationHealthIssue]
     public let scannedFiles: [String]
     public let generatedAt: Date
+    public let files: [ConfigurationFileCheck]
 
-    public init(issues: [ConfigurationHealthIssue], scannedFiles: [String], generatedAt: Date = Date()) {
+    public init(issues: [ConfigurationHealthIssue], scannedFiles: [String], generatedAt: Date = Date(), files: [ConfigurationFileCheck] = []) {
         self.issues = issues
         self.scannedFiles = scannedFiles
         self.generatedAt = generatedAt
+        self.files = files.isEmpty ? scannedFiles.map { .init(runtime: .codex, path: $0, status: .checked, detail: "Structural checks") } : files
+    }
+
+    public func forAgent(_ runtime: AgentRuntime) -> Self {
+        let selected = files.filter { $0.runtime == runtime }
+        return .init(issues: issues.filter { $0.runtime == runtime },
+                     scannedFiles: selected.filter { $0.status == .checked }.map(\.path),
+                     generatedAt: generatedAt, files: selected)
     }
 
     public static let empty = ConfigurationHealthReport(issues: [], scannedFiles: [])
@@ -107,10 +126,11 @@ public enum AgentConfigurationAuditor {
         var hasURL = false
     }
 
-    private static func auditCodexConfig(
+    static func auditCodexConfig(
         _ body: String,
         url: URL,
-        configuration: Configuration
+        configuration: Configuration,
+        runtime: AgentRuntime = .codex
     ) -> [ConfigurationHealthIssue] {
         var issues: [ConfigurationHealthIssue] = []
         var table = ""
@@ -127,7 +147,7 @@ public enum AgentConfigurationAuditor {
             let key = line[..<separator].trimmingCharacters(in: .whitespaces)
             let rawValue = line[line.index(after: separator)...].trimmingCharacters(in: .whitespaces)
 
-            if table == "otel", key == "approvals_reviewer" || key == "personality" {
+            if runtime == .codex, table == "otel", key == "approvals_reviewer" || key == "personality" {
                 issues.append(ConfigurationHealthIssue(
                     id: "codex-misplaced-\(key)-\(url.path)",
                     severity: .warning,
@@ -155,17 +175,17 @@ public enum AgentConfigurationAuditor {
         }
 
         for server in servers.values.sorted(by: { $0.name < $1.name }) where server.enabled && !server.hasURL {
-            guard let command = server.command, !command.isEmpty else { continue }
+            guard let command = server.command, !command.isEmpty, !command.contains("$"), !command.contains("{{"), !(command.contains("/") && !command.hasPrefix("/") && !command.hasPrefix("~/")) else { continue }
             if !commandExists(command, cwd: server.cwd, configURL: url, configuration: configuration) {
                 issues.append(ConfigurationHealthIssue(
-                    id: "codex-mcp-command-\(server.name)-\(url.path)",
+                    id: "\(runtime.rawValue)-mcp-command-\(SHA256.hash(data: Data(server.name.utf8)).prefix(8).map { String(format: "%02x", $0) }.joined())-\(url.path)",
                     severity: .error,
-                    runtime: .codex,
-                    title: "`\(server.name)` MCP cannot start",
-                    detail: "The enabled server points to `\(command)`, but that executable is not available.",
+                    runtime: runtime,
+                    title: "MCP launcher not found",
+                    detail: "A configured local MCP executable was not found in the checked paths. Agent-specific PATH overrides may differ.",
                     path: url.path,
                     line: server.commandLine,
-                    remediation: "Install `\(command)`, replace `command` with a valid executable path, or set `enabled = false` if this server is stale."
+                    remediation: "Review this server’s command in the source file. Confirm the executable in the agent’s environment; repair its path or disable the server if it is no longer needed."
                 ))
             }
         }
@@ -179,13 +199,14 @@ public enum AgentConfigurationAuditor {
         return unquote(name)
     }
 
-    private static func commandExists(
+    static func commandExists(
         _ command: String,
         cwd: String?,
         configURL: URL,
         configuration: Configuration
     ) -> Bool {
         let manager = FileManager.default
+        if command.hasPrefix("~/") { return manager.isExecutableFile(atPath: configuration.home.appendingPathComponent(String(command.dropFirst(2))).path) }
         if command.hasPrefix("/") { return manager.isExecutableFile(atPath: command) }
         if command.contains("/") {
             let base: URL
@@ -205,7 +226,7 @@ public enum AgentConfigurationAuditor {
 
     private static func unquote<S: StringProtocol>(_ value: S) -> String {
         let string = String(value).trimmingCharacters(in: .whitespaces)
-        guard string.count >= 2, string.first == "\"", string.last == "\"" else { return string }
+        guard string.count >= 2, (string.first == "\"" && string.last == "\"") || (string.first == "'" && string.last == "'") else { return string }
         return String(string.dropFirst().dropLast())
     }
 

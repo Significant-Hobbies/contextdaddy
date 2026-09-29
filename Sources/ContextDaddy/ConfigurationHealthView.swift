@@ -5,28 +5,31 @@ import SwiftUI
 struct ConfigurationHealthView: View {
     @Environment(ContextDaddyModel.self) private var model
     let report: ConfigurationHealthReport
+    var runtime: AgentRuntime = .codex
 
     var body: some View {
         Panel(padding: 14) {
             VStack(alignment: .leading, spacing: 12) {
-                HStack(alignment: .firstTextBaseline) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Configuration health").font(.headline)
-                        Text("Ignored settings and broken enabled MCP launchers, deduplicated by root cause.")
-                            .font(.caption).foregroundStyle(DaddyTheme.muted)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(report.scannedFiles.isEmpty ? "Setup has not been verified" : report.issues.isEmpty ? "No supported setup problems found" : "\(report.issues.count) setup \(report.issues.count == 1 ? "problem" : "problems") to resolve")
+                        .font(.headline).fixedSize(horizontal: false, vertical: true)
+                    Text("\(runtime.rawValue) configuration · \(report.errorCount) errors · \(report.warningCount) warnings · \(report.scannedFiles.count) configuration \(report.scannedFiles.count == 1 ? "file" : "files") checked")
+                        .font(.caption).foregroundStyle(DaddyTheme.muted)
+                    HStack {
+                        statusBadge
+                        if !report.issues.isEmpty {
+                            Button("Copy all \(report.issues.count) \(report.issues.count == 1 ? "issue" : "issues")", systemImage: "doc.on.doc", action: copyAll)
+                                .font(.caption).fixedSize()
+                        }
                     }
-                    Spacer()
-                    if !report.issues.isEmpty {
-                        Button("Copy all \(report.issues.count) \(report.issues.count == 1 ? "issue" : "issues")", systemImage: "doc.on.doc", action: copyAll)
-                            .font(.caption)
-                    }
-                    statusBadge
                 }
 
+                Text("Checks local configuration structure and declared MCP launchers. Credentials, remote connectivity, managed settings, imported configurations and launch-time overrides are not tested.")
+                    .font(.caption).foregroundStyle(DaddyTheme.muted)
                 if model.configurationIssueBaseline != nil {
                     HStack(spacing: 12) {
                         if let result = model.configurationIssueVerification {
-                            Text("\(result.cleared.count) detector-cleared · \(result.stillDetected.count) still detected · \(result.unverified.count) unverified")
+                            Text("\(result.cleared.filter { $0.runtime == runtime }.count) detector-cleared · \(result.stillDetected.filter { $0.runtime == runtime }.count) still detected · \(result.unverified.filter { $0.runtime == runtime }.count) unverified")
                                 .font(.caption).foregroundStyle(DaddyTheme.muted)
                         } else {
                             Text("Agent handoff copied. Rescan after changes; missing config files remain unverified.")
@@ -41,30 +44,39 @@ struct ConfigurationHealthView: View {
                         .font(.caption)
                     }
                     if let result = model.configurationIssueVerification {
-                        ForEach(result.cleared) { issue in issueStatus(issue, "CLEARED", DaddyTheme.mint) }
-                        ForEach(result.stillDetected) { issue in issueStatus(issue, "STILL DETECTED", DaddyTheme.amber) }
-                        ForEach(result.unverified) { issue in issueStatus(issue, "UNVERIFIED", DaddyTheme.muted) }
+                        ForEach(result.cleared.filter { $0.runtime == runtime }) { issue in issueStatus(issue, "CLEARED", DaddyTheme.mint) }
+                        ForEach(result.stillDetected.filter { $0.runtime == runtime }) { issue in issueStatus(issue, "STILL DETECTED", DaddyTheme.amber) }
+                        ForEach(result.unverified.filter { $0.runtime == runtime }) { issue in issueStatus(issue, "UNVERIFIED", DaddyTheme.muted) }
                     }
                 }
 
-                if report.scannedFiles.isEmpty {
+                if !report.issues.isEmpty {
+                    ForEach(report.issues) { issue in
+                        Divider().overlay(DaddyTheme.line)
+                        issueRow(issue)
+                    }
+                } else if report.scannedFiles.isEmpty {
                     Label("No readable supported agent configuration was found.", systemImage: "questionmark.folder")
                         .font(.caption).foregroundStyle(DaddyTheme.muted)
                 } else if report.issues.isEmpty {
                     Label("No structural configuration problems detected.", systemImage: "checkmark.seal.fill")
                         .font(.caption.weight(.semibold)).foregroundStyle(DaddyTheme.mint)
-                } else {
-                    ForEach(report.issues) { issue in
-                        Divider().overlay(DaddyTheme.line)
-                        issueRow(issue)
-                    }
                 }
 
+                DisclosureGroup("What was checked") {
                 VStack(alignment: .leading, spacing: 5) {
-                    Label("This scans supported configuration files, not launch-time session flags. A warning such as `session-flags.token_budget` must be traced to the Codex launcher that supplied it.", systemImage: "info.circle")
+                    ForEach(report.files) { file in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text((file.path as NSString).abbreviatingWithTildeInPath).font(.caption.monospaced()).textSelection(.enabled)
+                            Text(file.status.rawValue + " · " + file.detail)
+                                .foregroundStyle(file.status == .unverified ? DaddyTheme.amber : DaddyTheme.muted)
+                        }
+                    }
+                    Label("Checks user files and files directly inside the selected folder. Inherited, custom-home, managed and imported settings may add other sources. Missing optional files are not errors.", systemImage: "info.circle")
                     Label("Read-only check: credential, header, environment, and MCP argument values are ignored.", systemImage: "lock.shield")
                 }
                 .font(.caption2).foregroundStyle(DaddyTheme.muted)
+                }.font(.caption)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -73,7 +85,7 @@ struct ConfigurationHealthView: View {
     private func copyAll() {
         NSPasteboard.general.clearContents()
         guard NSPasteboard.general.setString(IssueBriefFormatter.configuration(report.issues), forType: .string) else { return }
-        model.captureConfigurationIssues()
+        model.captureConfigurationIssues(report.issues)
     }
 
     private func issueStatus(_ issue: ConfigurationHealthIssue, _ status: String, _ color: Color) -> some View {
@@ -87,8 +99,8 @@ struct ConfigurationHealthView: View {
     }
 
     private var statusBadge: some View {
-        let color = report.errorCount > 0 ? DaddyTheme.coral : report.warningCount > 0 ? DaddyTheme.amber : DaddyTheme.mint
-        let label = report.issues.isEmpty ? "NO FILE ISSUES" : "\(report.issues.count) FILE \(report.issues.count == 1 ? "ISSUE" : "ISSUES")"
+        let color = report.errorCount > 0 ? DaddyTheme.coral : report.scannedFiles.isEmpty || report.files.contains { $0.status == .unverified } ? DaddyTheme.amber : report.warningCount > 0 ? DaddyTheme.amber : DaddyTheme.mint
+        let label = !report.issues.isEmpty ? "\(report.issues.count) FILE ISSUES" : report.scannedFiles.isEmpty ? "UNVERIFIED" : report.files.contains { $0.status == .unverified } ? "PARTIAL" : "CHECKED"
         return Text(label)
             .font(.system(size: 9, weight: .bold, design: .rounded)).tracking(0.6)
             .foregroundStyle(color)
@@ -123,10 +135,10 @@ struct ConfigurationHealthView: View {
     private func issueCopy(_ issue: ConfigurationHealthIssue) -> some View {
         VStack(alignment: .leading, spacing: 3) {
             Text(issue.title).font(.subheadline.weight(.semibold))
-            Text(issue.detail).font(.caption).foregroundStyle(DaddyTheme.muted)
+            Text("Impact: " + issue.detail).font(.caption).foregroundStyle(DaddyTheme.muted)
             Text("\((issue.path as NSString).abbreviatingWithTildeInPath):\(issue.line)")
                 .font(.caption2.monospaced()).foregroundStyle(DaddyTheme.blue).textSelection(.enabled)
-            Text(issue.remediation).font(.caption2).foregroundStyle(DaddyTheme.muted)
+            Text("Next step: " + issue.remediation).font(.caption2).foregroundStyle(DaddyTheme.muted)
         }
         .fixedSize(horizontal: false, vertical: true)
     }
@@ -135,7 +147,9 @@ struct ConfigurationHealthView: View {
         HStack(spacing: 8) {
             Button("Copy fix", systemImage: "doc.on.doc") {
                 NSPasteboard.general.clearContents()
-                NSPasteboard.general.setString(issue.remediation, forType: .string)
+                if NSPasteboard.general.setString(IssueBriefFormatter.configuration([issue]), forType: .string) {
+                    model.captureConfigurationIssues([issue])
+                }
             }
             Button("Reveal", systemImage: "arrow.up.forward.square") {
                 NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: issue.path)])

@@ -66,3 +66,76 @@ Dense operational information can become tiring or ambiguous. Progressive disclo
 ## Skills usability correction
 
 The owner selected A, Guided Library, for onboarding. A dismissible three-step guide explains finding a skill, inspecting agent access, and local versus plugin-owned changes. It sits beside the workspace on wide windows and above it on smaller windows, can be reopened with Guide, and never performs a skill mutation. Native titled window chrome owns the traffic-light space; the root and skill scroll viewport use explicit available dimensions. Selecting a skill brings its inspector into view, with a route back to the guide.
+
+
+## Skill organization ledger (owner selected B, 2026-09-27)
+
+Skills now uses a sortable, selectable ledger with columns for skill, location/scope, agent access, invocation, and instruction-copy count. Compact windows stack the same data into labelled rows; the existing bounded page scroll remains the only main scroll area. Search, ownership, agent, location, scope, and invocation filters compose. Selection persists across pages and filters and states that explicitly.
+
+The change tray offers Move to folder, Share with agents, Set invocation, and Compare selected copies. Clean up duplicates in the header opens the full catalog when no rows are selected. Every operation has one configuration-and-preview sheet, a visible Apply count, per-item inclusion, and a completion or partial-failure report. History retains undo.
+
+Cleanup requires an explicit keep-source choice for each group; there is no default canonical source that might select an archived project. Groups are paginated eight at a time. Plugin/system groups explain ownership. Full-folder comparison follows the instruction-only grouping and rejects mismatched support files or permissions. Version drift stays reviewable through Agent policies. The preview calls out location-dependent references and the future shared-edit impact before consolidation.
+
+The visual system remains native black/mint with rounded headings, monospaced paths, amber uncertainty, and existing button geometry. Owner previews and selection are retained under artifacts/design/skill-organization. No new runtime dependencies.
+
+## Recommended cleanup and folder context
+
+The owner clarified that folder counts alone do not solve cleanup, then requested implementation of the described recommended-plan workflow. The new Skills entry follows that action-first hierarchy using the established native ledger and preview components: scope selector, local name/source totals, an optional collapsed agent comparison, and a paginated decision queue. It develops the cleanup-workbench direction shown in the folder-context previews; no new visual identity replaces the previously selected system.
+
+Ready to preview, Needs a decision, Plugin ownership, and Keep independent separate verified actions from interpretation. Suggested source paths and affected agents are visible before opening a recommendation. Full-source and exposure evidence is disclosed on demand. The source library, History and refresh are reachable from the header.
+
+Choose folder and Quick targets scope discovery to a working directory. Agent comparisons remain collapsed initially so they do not push cleanup actions below the first screen. Partial coverage is visible above totals; plugin activation remains explicitly unverified. Agent rows show distinct names and sources separately, with automatic/manual/model-only/disabled policy and overlapping review counts.
+
+Preview sheets state the full-plan before/after projection, expose per-item inclusion and every mutation path, and keep completion or partial-failure results visible. History offers guarded restoration. Keep as-is records a reopenable review decision; unchanged source counts make clear that it did not clean up files. Unsupported plugin removal is described honestly rather than represented by an inert Apply button.
+
+## Folder-first simplification
+
+After the owner rejected the control-heavy interface and asked us to implement the described simplification, folder search and path entry moved directly into Skills. Cleanup proposals precede inventory totals; counts and coverage remain in a disclosure. Project files and instructions are a secondary inspector rather than a competing primary sidebar destination. Proposal rows expose source, affected agents and invocation policies before review. The existing native visual system and preview/apply/restore mechanics remain.
+
+## Navigation correction: build 16
+
+The approved sortable ledger is the default Skills view. A persistent segmented control names Library, Cleanup, and Agent access rather than requiring users to find differently placed return buttons. Folder scope is shared across the library, cleanup recommendations and agent access summaries; the current path remains visible. Plugin counts use plain ownership language. A source with no known route explains the uncertainty and offers sharing when locally editable.
+
+## Final simplified interface: build 17
+
+Owner explicitly requested one final single-screen output after approving one list and a details panel. Skills now has a compact title, folder menu, search, collapsed filters, and one list. Details sit beside the list when space permits and below it on narrow windows. Cleanup is a dialog; advanced operations and History are under More. No view-mode navigation, hero metrics, automatic onboarding cards or empty bulk-action trays appear.
+
+## Answer-first pages (owner delegated, 2026-09-27)
+
+The owner delegated direction selection for Skills, Agent activity and Diagnostics. The established native black/mint system stays. Skills adds a scoped location map before its ledger: each location discloses logical routes, resolved physical sources, discovered agent access and matching-instruction leads. A location filters the library and its unselected cleanup scope; exact-folder validation still gates consolidation. Route counts are not added as unique skills. Unrecognized locations and partial coverage remain explicit limitations.
+
+Agent activity replaces the OpenTelemetry navigation label. Recent recorded runs and review signals precede collapsed measurements, source notes and interpretation details. Missing adapters are unavailable rather than zero; trace presence is not a successful outcome. Diagnostics always opens configuration health, leads with detected issues and their impact/next step, identifies scanned files, and collapses raw coverage evidence. No new telemetry adapter, memory manager or unattended cleanup is implied.
+
+## All-agent pages (build 23)
+
+Skills, Agent activity and Diagnostics support selecting Codex, Claude, Cursor, Devin and Grok. Activity combines existing agent-isolated indexed history with a separate metadata-only activity-file browser. It reads filenames and modification dates under known per-agent roots, excludes linked roots/descendants and irrelevant Cursor MCP/canvas directories, and reports bounded scan coverage. File writes are never claimed as task completions or token totals. Cursor billing remains in its own dashboard; no new billing or live-trace adapter is implied.
+
+Diagnostics resolves discovered skill availability, invocation uncertainty and overlap per agent, with review briefs and navigation preserving both agent and folder scope. Codex structural startup-configuration checks remain a separately identified adapter; other agents receive clearly labeled setup investigation paths, not invented successful configuration checks. Local history, source files and live OTEL remain separate evidence categories.
+
+## Completed local management workflows (build 25)
+
+The library opens on current local definitions, excluding archived and installer-owned files from the default list and location map. Plugin files have a separate explicit entry, and the folder map is expandable so search and the ledger remain immediately reachable. The existing overlap/scope decision workbench is reachable from More. Cleanup snapshots its reviewed definitions; a post-apply rescan cannot change the approved count.
+
+Diagnostics now performs bounded structural checks for all five agents: Codex/Grok MCP command references and supported Codex misplaced settings; Claude/Cursor/Devin JSON object validity and declared MCP launcher references. User files and files directly in the selected folder are identified individually as checked, absent or unverified. Linked paths and oversized/unreadable files are not parsed. Credential values, URLs, environment values and arguments never enter findings. No executable is launched and no remote server is contacted. This is not a full agent schema, connectivity, permissions or imported/managed settings validator. Repair handoffs retain the selected issues and verify the same sources.
+
+Invocation editing supports Codex policy files, Devin triggers and shared Claude/Cursor/Grok frontmatter. The resolver follows their distinct rules: Codex ignores other agents' frontmatter invocation flags, Devin uses triggers, and Grok user-invocable=false disables both user and model visibility. A requested restriction that does not control Codex is surfaced as a policy review item with a direct filtered-library handoff. Known project paths in recorded activity can open that folder's skills for the same agent.
+
+Evidence: full suite 117 passed after the bounded scan contention fix; subsequent focused policy/native suites passed after final changes. Native fixture cleanup applied, reduced two definitions to one source retaining Codex and Claude routes, and restored through History with both files intact. Cursor fixture diagnosis was captured, repaired and independently reported detector-cleared. Real skills and agent configuration were not changed. Live telemetry still requires an agent that emits the supported signals; local history and file metadata remain separately labeled.
+
+## Plugin ledger (build 28)
+
+The owner delegated design judgment after seeing three previews. The plugin ledger uses the established native visual system: one row per agent/marketplace/plugin identity, adjacent evidence inspector at wide widths, stacked detail on narrow windows. Skills → Manage plugins and More → Manage plugins both open this view.
+
+A bounded read-only scan inventories the default Codex and Claude cache hierarchies, including plugins with no skills. It groups versions, counts skill directory names, measures regular-file bytes, and labels incomplete sizes as lower bounds. Linked directories are not traversed; dependency trees and repository internals are excluded from size measurement. Whole SKILL.md hashes identify matching local instructions without claiming complete-folder equivalence.
+
+Claude registry version 2 supplies per-version installation references and user/project/local scopes. Missing, malformed or unsupported registry data cannot establish an unreferenced version. Codex and Claude explicit enablement declarations are shown with their source files; selected folders add ancestor/local settings. These are individual declarations, not effective activation or observed invocation. Custom homes, managed configuration, trust, profiles, runtime overrides and Cursor/Devin/Grok plugin ownership remain unresolved and are labelled.
+
+The management sheet supplies the exact plugin identity, scope evidence, an agent-ready brief, official owner instructions and a recheck action. Disable/uninstall is performed in the owning plugin manager. ContextDaddy does not offer direct cache deletion or infer safe deletion from age, modification dates or a missing registry reference. No actual plugins were modified during this implementation.
+
+## Completion workflows, build 30
+
+Preserve the owner-selected sortable ledger and delegated answer-first direction. Memory uses the same black/mint hierarchy, path typography, folder/search controls, paginated list and responsive selected-document inspector. It adds no alternate visual language. Separate Memory navigation reflects the owner's later three-page structure; Skills retains invocation controls, which Memory does not imitate.
+
+Content comparison is explicit because it reads local document bodies. Matching contents link to counterpart locations; independent scope remains a review decision. Document changes require a before/after preview, with archive consequences and guarded recovery visible. Plugin action sheets show exact owner, scope and command before applying. Activity distinguishes filtered session history from unfiltered live aggregates and gives direct folder-preserving review actions.
+
+Responsive native renders cover 390, 768 and 1440 points. These are fixture renders, not evidence that cloud memories or unsupported agent adapters are resolved. Installed interactive checks are tracked separately in artifacts/design/complete-workflows/verification.md.

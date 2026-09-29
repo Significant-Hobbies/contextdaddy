@@ -5,6 +5,7 @@ import Observation
 enum AppSection: String, CaseIterable, Identifiable {
     case overview = "Overview"
     case skills = "Skills"
+    case memory = "Memory"
     case projects = "Projects"
     case telemetry = "Telemetry"
 
@@ -12,14 +13,15 @@ enum AppSection: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .overview: "Usage"
-        case .telemetry: "OpenTelemetry"
-        case .skills, .projects: rawValue
+        case .telemetry: "Agent activity"
+        case .skills, .memory, .projects: rawValue
         }
     }
     var icon: String {
         switch self {
         case .overview: "square.grid.2x2"
         case .skills: "square.stack.3d.up"
+        case .memory: "brain.head.profile"
         case .projects: "folder.badge.gearshape"
         case .telemetry: "waveform.path.ecg"
         }
@@ -45,6 +47,8 @@ enum SkillFilter: String, CaseIterable, Identifiable {
 }
 
 enum SkillsMode: String, CaseIterable, Identifiable {
+    case plugins = "Plugins"
+    case cleanup = "Cleanup plan"
     case library = "Library"
     case ledger = "Agent policies"
     case redundancy = "Redundancy review"
@@ -91,6 +95,8 @@ final class ContextDaddyModel {
     var selectedTelemetryRuntime: AgentRuntime = .codex
     var isTelemetryLoading = false
     var usageReport: LocalUsageReport?
+    var skillActivity: SkillActivitySnapshot?
+    var isSkillActivityLoading = false
     var usageError: String?
     var isUsageLoading = false
     var isDevinLoading = false
@@ -121,9 +127,13 @@ final class ContextDaddyModel {
     var search = ""
     var filter: SkillFilter = .all
     var skillsMode: SkillsMode = .library
+    var skillFolderContext: SkillFolderContext?
     var redundancyKindFilter: RedundancyKindFilter = .review
     var redundancyAgentFilter: RedundancyAgentFilter = .all
     var selectedRuntime: AgentRuntime = .codex
+    var pendingSkillRuntime: AgentRuntime?
+    var pendingSkillInvocation: InvocationMode?
+    var pendingSkillAllFolders = false
     var isLoading = false
     var loadStarted = Date()
     var discoveryStatus = "Not scanned yet"
@@ -144,6 +154,7 @@ final class ContextDaddyModel {
     }
 
     func show(_ destination: AppSection) {
+        if destination == .skills, pendingSkillRuntime != nil { skillsMode = .library }
         section = destination
         evidenceOpen = false
     }
@@ -155,8 +166,8 @@ final class ContextDaddyModel {
 
     var inventory: [AIContextItem] { discoveryReport?.items ?? [] }
     var folderRankings: [AIContextFolderRanking] { discoveryReport?.folderRankings ?? [] }
-    var governanceSummary: SkillGovernanceSummary? { catalog?.governance(for: selectedRuntime) }
-    var sharingSummary: SkillSharingSummary? { catalog?.sharing }
+    var governanceSummary: SkillGovernanceSummary? { skillFolderContext.map { SkillGovernanceSummary(records: $0.records, runtime: selectedRuntime) } ?? catalog?.governance(for: selectedRuntime) }
+    var sharingSummary: SkillSharingSummary? { skillFolderContext.map { SkillSharingSummary(records: $0.records) } ?? catalog?.sharing }
     var usageModels: [String] { usageReport?.models(for: usageService, range: usageRange) ?? [] }
     var usageSlice: UsageSlice? { usageReport?.slice(service: usageService, model: usageModel, range: usageRange) }
     var usageDashboard: UsageDashboardProjection? {
@@ -209,7 +220,7 @@ final class ContextDaddyModel {
     }
 
     var visibleSkills: [SkillRecord] {
-        guard let records = catalog?.records else { return [] }
+        guard let records = skillFolderContext?.records ?? catalog?.records else { return [] }
         return records.filter { record in
             let matchesSearch = search.isEmpty || record.name.localizedCaseInsensitiveContains(search)
                 || record.description.localizedCaseInsensitiveContains(search)
@@ -265,8 +276,8 @@ final class ContextDaddyModel {
             scannedRecordIDs: lastError == nil ? catalog.map { Set($0.records.map(\.id)) } : nil)
     }
 
-    func captureConfigurationIssues() {
-        configurationIssueBaseline = ConfigurationIssueBaseline(issues: configurationHealth.issues)
+    func captureConfigurationIssues(_ issues: [ConfigurationHealthIssue]? = nil) {
+        configurationIssueBaseline = ConfigurationIssueBaseline(issues: issues ?? configurationHealth.issues)
         configurationIssueVerification = nil
     }
 
@@ -274,8 +285,43 @@ final class ContextDaddyModel {
         guard let baseline = configurationIssueBaseline, !isVerifyingConfigurationIssues else { return }
         isVerifyingConfigurationIssues = true
         defer { isVerifyingConfigurationIssues = false }
-        await refresh()
+        await refreshConfigurationHealth()
         configurationIssueVerification = baseline.verify(against: configurationHealth)
+    }
+
+    private var folderGeneration = UUID()
+    var skillFolderError: String?
+    var isSkillFolderLoading = false
+    func loadSkillFolder(_ path: String) async {
+        let request = UUID()
+        folderGeneration = request
+        skillFolderError = nil
+        guard !path.isEmpty else { skillFolderContext = nil; isSkillFolderLoading = false; return }
+        isSkillFolderLoading = true
+        defer { if folderGeneration == request { isSkillFolderLoading = false } }
+        do {
+            let task = Task.detached(priority: .userInitiated) {
+                let directory = URL(fileURLWithPath: path)
+                return SkillFolderContext.resolve(report: try AIContextDiscovery.discoverFolder(directory), directory: directory)
+            }
+            let context = try await withTaskCancellationHandler { try await task.value } onCancel: { task.cancel() }
+            guard !Task.isCancelled, folderGeneration == request else { return }
+            skillFolderContext = context
+        } catch {
+            guard !Task.isCancelled, folderGeneration == request else { return }
+            skillFolderContext = nil
+            skillFolderError = "Could not inspect the selected folder. " + error.localizedDescription
+        }
+    }
+
+    private var configurationGeneration = UUID()
+    func refreshConfigurationHealth() async {
+        let request = UUID()
+        configurationGeneration = request
+        let project = skillFolderContext.map { URL(fileURLWithPath: $0.path) }
+        let report = await Task.detached(priority: .utility) { AgentSetupAudit.audit(project: project) }.value
+        guard configurationGeneration == request else { return }
+        configurationHealth = report
     }
 
     func refreshSkillLibrary() async {
@@ -317,9 +363,7 @@ final class ContextDaddyModel {
             return (report, SkillPolicyResolver.resolve(report: report), AIContextProjectCatalog.projects(from: report))
         }.value
         async let loadedTelemetry = LocalObservabilityClient().load()
-        async let loadedConfigurationHealth = Task.detached(priority: .utility) {
-            AgentConfigurationAuditor.audit()
-        }.value
+
         do {
             let loaded = try await loadedContext
             guard refreshGeneration == request else { return }
@@ -335,11 +379,11 @@ final class ContextDaddyModel {
         // Publish local discovery before waiting for unrelated collector or config reads.
         isLoading = false
         let nextTelemetry = await loadedTelemetry
-        let nextConfigurationHealth = await loadedConfigurationHealth
+        if let path = skillFolderContext?.path { await loadSkillFolder(path) }
+        await refreshConfigurationHealth()
         var nextHistory = await snapshotStore.load()
         guard refreshGeneration == request else { return }
         telemetry = nextTelemetry
-        configurationHealth = nextConfigurationHealth
         telemetryHistory = nextHistory
         if nextTelemetry.collectorReachable {
             do {
@@ -395,6 +439,14 @@ final class ContextDaddyModel {
         guard usageGeneration == request else { return }
         if let usageReport { self.usageReport = usageReport.withDevin(devin) }
         isDevinLoading = false
+    }
+
+    func refreshSkillActivity() async {
+        guard !isSkillActivityLoading else { return }
+        isSkillActivityLoading = true
+        let snapshot = await Task.detached(priority: .utility) { SkillActivityHistory().scan() }.value
+        skillActivity = snapshot
+        isSkillActivityLoading = false
     }
 
     func refreshQuota() async {

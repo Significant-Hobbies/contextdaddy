@@ -1,3 +1,4 @@
+import AppKit
 import ContextCore
 import SwiftUI
 
@@ -56,6 +57,14 @@ struct ProjectsContextView: View {
                 subtitle: "These files were discovered for each project. Availability does not mean they were loaded into a live prompt.",
                 art: .projects
             )
+            HStack(spacing: 12) {
+                Button("Choose folder…", systemImage: "folder.badge.plus", action: chooseFolder)
+                    .buttonStyle(ContextDaddyButtonStyle())
+                if !search.isEmpty {
+                    Button("Clear search") { search = "" }
+                        .buttonStyle(ContextDaddyButtonStyle())
+                }
+            }
             ViewThatFits(in: .horizontal) {
                 HStack(spacing: 10) {
                     projectSearch
@@ -89,7 +98,7 @@ struct ProjectsContextView: View {
                         ContentUnavailableView(
                             model.isLoading ? "Finding project context…" : "No matching project context",
                             systemImage: "folder.badge.questionmark",
-                            description: Text(model.isLoading ? "Previous results will stay visible during later refreshes." : "Add a folder in Diagnostics or change the filters.")
+                            description: Text(model.isLoading ? "Previous results will stay visible during later refreshes." : "Choose a folder above or change the search and agent filter. Folders without project-owned context files do not appear in this list.")
                         ).padding(.top, 60)
                     }
                 }
@@ -113,6 +122,26 @@ struct ProjectsContextView: View {
     }
 
     private func resetPage() { page = 0; selectedProjectID = nil }
+
+    private func chooseFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = true
+        panel.canChooseFiles = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Inspect folder"
+        panel.message = "Choose a project folder to discover its instructions and skills."
+        guard panel.runModal() == .OK, let folder = panel.url else { return }
+        let path = folder.resolvingSymlinksInPath().path
+        provider = "All agents"
+        search = path
+        page = 0
+        model.addExtraRoots([folder])
+        Task {
+            await model.refresh()
+            // Do not replace a newer search made while discovery was running.
+            if search == path { selectedProjectID = path }
+        }
+    }
     private func compare(_ a: Int64, _ b: Int64) -> ComparisonResult { a == b ? .orderedSame : (a < b ? .orderedAscending : .orderedDescending) }
 
     private var projectSearch: some View {

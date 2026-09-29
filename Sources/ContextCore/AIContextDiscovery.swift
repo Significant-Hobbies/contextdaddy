@@ -51,6 +51,37 @@ public enum AIContextDiscovery {
         return AIContextDiscoveryReport(items: items, folderRankings: rankings, coverage: coverage,
             elapsed: Date().timeIntervalSince(started))
     }
+
+    /// Inspect one working directory and its ancestors, never sibling projects or caches.
+    public static func discoverFolder(_ directory: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser) throws -> AIContextDiscoveryReport {
+        let root = directory.resolvingSymlinksInPath().standardizedFileURL
+        guard isDirectory(root) else { throw SkillManagementError(message: "Choose an existing folder.") }
+        let started = Date()
+        var state = State(configuration: .init(home: home, projectRoots: []))
+        try state.discoverGlobals()
+        var ancestor = root
+        while ancestor.path != "/" {
+            try Task.checkCancellation()
+            // Home agent roots were already indexed with global scope.
+            if ancestor != home.resolvingSymlinksInPath().standardizedFileURL {
+                state.coverageRoots.append(ancestor.path)
+                try state.projectMarkers(at: ancestor)
+            }
+            ancestor.deleteLastPathComponent()
+        }
+        let items = state.items.values.sorted { $0.path < $1.path }
+        var coverage = AIContextCoverage(roots: state.coverageRoots, visitedEntries: state.visited,
+            itemLimitReached: state.itemLimitReached, entryLimitReached: state.entryLimitReached,
+            unreadableCount: state.unreadable, skippedLinks: state.skippedLinks,
+            notes: state.notes + ["Targeted folder scan. Plugin activation and live prompt loading are not verified; plugin caches are excluded."])
+        coverage.skillDepthReached = state.skillDepthReached
+        return AIContextDiscoveryReport(items: items, folderRankings: rankings(items: items, in: root, home: home),
+            coverage: coverage, elapsed: Date().timeIntervalSince(started))
+    }
+
+    public static func rankings(items: [AIContextItem], in directory: URL, home: URL = FileManager.default.homeDirectoryForCurrentUser, preserveSkillAliases: Bool = false) -> [AIContextFolderRanking] {
+        rank(items: items, roots: [directory.resolvingSymlinksInPath().standardizedFileURL.path], home: home, deduplicateSkills: !preserveSkillAliases)
+    }
 }
 
 private struct State {
@@ -302,8 +333,12 @@ private struct State {
         pluginEntries += 1; visited += 1; return true
     }
     mutating func children(_ root: URL) -> [URL] {
-        do { return try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil).sorted { $0.path < $1.path } }
-        catch { unreadable += 1; return [] }
+        do { return try BoundedDirectoryReader.children(root).sorted { $0.path < $1.path } }
+        catch {
+            unreadable += 1
+            if notes.count < 40 { notes.append("Could not read directory: \(root.path). \(error.localizedDescription)") }
+            return []
+        }
     }
 }
 
@@ -350,7 +385,7 @@ private func item(url: URL, resolved: String?, info: stat, provider: AIContextPr
     return AIContextItem(id: path, path: path, resolvedPath: resolved, name: kind == .skill ? url.deletingLastPathComponent().lastPathComponent : url.lastPathComponent, scope: scope, kind: kind, provider: provider, source: source, logicalBytes: Int64(info.st_size), allocatedBytes: allocated, modified: contextDate(info), applicability: origin)
 }
 
-private func rank(items: [AIContextItem], roots: Set<String>, home: URL) -> [AIContextFolderRanking] {
+private func rank(items: [AIContextItem], roots: Set<String>, home: URL, deduplicateSkills: Bool = true) -> [AIContextFolderRanking] {
     let candidateRoots = roots.isEmpty ? Set(items.filter { $0.scope == .project }.map { URL(fileURLWithPath: $0.path).deletingLastPathComponent().path }) : roots
     return candidateRoots.flatMap { path -> [AIContextFolderRanking] in
         let effectivePath = canonicalPath(path)
@@ -378,7 +413,7 @@ private func rank(items: [AIContextItem], roots: Set<String>, home: URL) -> [AIC
             }
             var physicalSkills = Set<String>()
             relevant.removeAll { contribution in
-                guard contribution.item.kind == .skill else { return false }
+                guard deduplicateSkills, contribution.item.kind == .skill else { return false }
                 return !physicalSkills.insert(contribution.item.resolvedPath ?? contribution.item.path).inserted
             }
             // A Codex override in one directory replaces that directory's AGENTS.md.
@@ -422,4 +457,35 @@ private func nearestGitRoot(containing path: String) -> String? {
 private func canonicalPath(_ path: String) -> String {
     let value = URL(fileURLWithPath: path).resolvingSymlinksInPath().standardizedFileURL.path
     return value == "/private/var" ? "/var" : value.hasPrefix("/private/var/") ? "/var/" + value.dropFirst("/private/var/".count) : value
+}
+
+/// Filesystem access may wait for a disconnected volume or an OS permission prompt.
+/// Bound both the caller's wait and outstanding reads; never create unlimited stuck workers.
+enum BoundedDirectoryReader {
+    private final class ResultBox: @unchecked Sendable {
+        let lock = NSLock()
+        var result: Result<[URL], Error>?
+    }
+    private static let permits = DispatchSemaphore(value: 8)
+    static func children(_ root: URL, timeout: TimeInterval = 2,
+                         read: @escaping @Sendable (URL) throws -> [URL] = { try FileManager.default.contentsOfDirectory(at: $0, includingPropertiesForKeys: nil) }) throws -> [URL] {
+        let deadline = DispatchTime.now() + max(0, timeout)
+        guard permits.wait(timeout: deadline) == .success else {
+            throw SkillManagementError(message: "Directory access is still pending. Retry when unavailable locations recover.")
+        }
+        let box = ResultBox(), signal = DispatchSemaphore(value: 0)
+        // A dedicated thread avoids starving behind callers blocking a shared
+        // executor. The permits above cap outstanding filesystem reads at eight.
+        Thread.detachNewThread {
+            let result = Result { try read(root) }
+            box.lock.lock(); box.result = result; box.lock.unlock()
+            permits.signal()
+            signal.signal()
+        }
+        guard signal.wait(timeout: deadline) == .success else {
+            throw SkillManagementError(message: "Directory access timed out; check macOS access or volume availability.")
+        }
+        box.lock.lock(); let result = box.result; box.lock.unlock()
+        return try result!.get()
+    }
 }
