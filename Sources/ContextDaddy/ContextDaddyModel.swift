@@ -95,6 +95,8 @@ final class ContextDaddyModel {
     var selectedTelemetryRuntime: AgentRuntime = .codex
     var isTelemetryLoading = false
     var usageReport: LocalUsageReport?
+    var skillActivity: SkillActivitySnapshot?
+    var isSkillActivityLoading = false
     var usageError: String?
     var isUsageLoading = false
     var isDevinLoading = false
@@ -437,6 +439,14 @@ final class ContextDaddyModel {
         guard usageGeneration == request else { return }
         if let usageReport { self.usageReport = usageReport.withDevin(devin) }
         isDevinLoading = false
+    }
+
+    func refreshSkillActivity() async {
+        guard !isSkillActivityLoading else { return }
+        isSkillActivityLoading = true
+        let snapshot = await Task.detached(priority: .utility) { SkillActivityHistory().scan() }.value
+        skillActivity = snapshot
+        isSkillActivityLoading = false
     }
 
     func refreshQuota() async {

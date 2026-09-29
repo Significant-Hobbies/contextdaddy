@@ -2,6 +2,12 @@ import AppKit
 import ContextCore
 import SwiftUI
 
+private enum SkillActivityFilter: String, CaseIterable {
+    case all = "All activity"
+    case observed = "Observed"
+    case noEvidence = "No evidence"
+}
+
 struct SkillLibraryView: View {
     @Environment(ContextDaddyModel.self) private var model
     @AppStorage("skillLibrarySearch") private var query = ""
@@ -56,6 +62,8 @@ struct SkillLibraryView: View {
     @State private var sourceAudit: ExternalSkillSourceAudit?
     @State private var sourceAuditLoading = false
     @State private var unresolvedSourcesOnly = false
+    @State private var activityWindow = 30
+    @State private var activityFilter: SkillActivityFilter = .all
 
     private var records: [SkillRecord] { workingFolder.isEmpty ? model.catalog?.records ?? [] : model.skillFolderContext?.records ?? [] }
     private var results: [SkillRecord] { indexedRecords }
@@ -68,6 +76,14 @@ struct SkillLibraryView: View {
             .filter { !favoriteOnly || favorites.contains($0.id) }
             .filter { !unresolvedSourcesOnly || externalSources[$0.id]?.kind == .unresolved }
             .filter { mapSkillIDs?.contains($0.id) ?? true }
+            .filter { skill in
+                guard model.skillActivity != nil else { return true }
+                switch activityFilter {
+                case .all: return true
+                case .observed: return !activity(for: skill).isEmpty
+                case .noEvidence: return activity(for: skill).isEmpty
+                }
+            }
         let matchingIDs = Set(SkillLibraryIndex.matching(base, query: query).map(\.id))
         let matching = query.isEmpty ? base : base.filter { matchingIDs.contains($0.id) || tags[$0.id, default: ""].localizedCaseInsensitiveContains(query) }
         indexedRecords = SkillOrganizationIndex.matching(matching, runtime: agent, invocation: invocationFilter, scope: scopeFilter,
@@ -94,6 +110,7 @@ struct SkillLibraryView: View {
                     else {
                         inventoryAnswers
                         sourceAuditSummary
+                        activitySummary
                         DisclosureGroup("Where these skills come from", isExpanded: $locationsExpanded) {
                         SkillLocationMapView(records: ownedRecords) { path, ids in
                             query = ""; agent = nil; location = nil
@@ -188,6 +205,9 @@ struct SkillLibraryView: View {
         .onChange(of: location) { _, _ in resetPage() }
         .onChange(of: favoriteOnly) { _, _ in resetPage() }
         .onChange(of: unresolvedSourcesOnly) { _, _ in resetPage() }
+        .onChange(of: activityWindow) { _, _ in resetPage() }
+        .onChange(of: activityFilter) { _, _ in resetPage() }
+        .onChange(of: model.skillActivity?.scannedAt) { _, _ in rebuildIndex() }
         .onChange(of: selection?.id) { _, _ in document = nil; tab = "Overview" }
     }
 
@@ -463,6 +483,59 @@ struct SkillLibraryView: View {
         }
     }
 
+    private var activityCutoff: String? {
+        guard activityWindow > 0,
+              let date = Calendar.current.date(byAdding: .day, value: -(activityWindow - 1), to: .now) else { return nil }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
+    }
+
+    private func activity(for skill: SkillRecord) -> SkillActivitySummary {
+        model.skillActivity?.summary(for: skill, runtime: agent,
+                                     folder: workingFolder.isEmpty ? nil : workingFolder,
+                                     sinceDay: activityCutoff) ?? SkillActivitySummary(observations: [])
+    }
+
+    private var activitySummary: some View {
+        Panel(padding: 14) {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack {
+                    Text("Recorded skill activity").font(.headline)
+                    Spacer()
+                    Button(model.isSkillActivityLoading ? "Reading history…" : model.skillActivity == nil ? "Read local history" : "Refresh history") {
+                        Task { await model.refreshSkillActivity() }
+                    }.disabled(model.isSkillActivityLoading)
+                }
+                if model.isSkillActivityLoading { ProgressView().controlSize(.small) }
+                if let snapshot = model.skillActivity {
+                    let observed = Set(records.filter { !activity(for: $0).isEmpty }.map { $0.name.lowercased() })
+                    Text("\(observed.count) skill names have recorded activity in this view. Select one to see its agents, dates, and evidence.")
+                        .font(.callout).fixedSize(horizontal: false, vertical: true)
+                    HStack {
+                        Picker("Window", selection: $activityWindow) {
+                            Text("30 days").tag(30)
+                            Text("90 days").tag(90)
+                            Text("All history").tag(0)
+                        }.fixedSize()
+                        Picker("Show", selection: $activityFilter) {
+                            ForEach(SkillActivityFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+                        }.fixedSize()
+                    }.font(.caption)
+                    Text(snapshot.coverage.map { "\($0.runtime.rawValue): \($0.files) files\($0.partial ? " · partial (\($0.note))" : "")" }.joined(separator: "  ·  "))
+                        .font(.caption2).foregroundStyle(DaddyTheme.muted).fixedSize(horizontal: false, vertical: true)
+                    if activityFilter == .noEvidence {
+                        Text("No recorded event does not mean unused. Agent logs differ, and this filter excludes folders without project attribution.")
+                            .font(.caption).foregroundStyle(DaddyTheme.amber)
+                    }
+                } else {
+                    Text("Scan existing agent sessions for skill tool calls and skill-file reads. This is local and read-only; prompts and responses are not retained.")
+                        .font(.callout).foregroundStyle(DaddyTheme.muted).fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
     private func auditSources() {
         let paths = records.filter { $0.ownership == .local && !SkillCleanupPlanner.isArchived($0) }.map(\.id)
         let selectedFolder = workingFolder
@@ -620,6 +693,9 @@ struct SkillLibraryView: View {
                                     if let evidence = externalSources[skill.id] {
                                         Text(evidence.kind.rawValue).font(.caption2).foregroundStyle(evidence.kind == .unresolved ? DaddyTheme.amber : DaddyTheme.muted)
                                     }
+                                    if let activity = activityLabel(skill) {
+                                        Text(activity).font(.caption2).foregroundStyle(DaddyTheme.mint).lineLimit(2)
+                                    }
                                 }.frame(width: width * 0.22, alignment: .leading)
                             }.buttonStyle(.plain).accessibilityLabel("Inspect \(skill.name)")
                             locationCell(skill).frame(width: width * 0.23, alignment: .leading)
@@ -631,6 +707,9 @@ struct SkillLibraryView: View {
                                 Button(skill.name) { selectedID = skill.id }.font(.headline).buttonStyle(.plain)
                                 if let evidence = externalSources[skill.id] {
                                     Text(evidence.kind.rawValue).font(.caption2).foregroundStyle(evidence.kind == .unresolved ? DaddyTheme.amber : DaddyTheme.muted)
+                                }
+                                if let activity = activityLabel(skill) {
+                                    Text(activity).font(.caption2).foregroundStyle(DaddyTheme.mint)
                                 }
                                 locationCell(skill)
                                 Text("Agents: \(agentLabel(skill))")
@@ -672,6 +751,17 @@ struct SkillLibraryView: View {
     private func agentLabel(_ skill: SkillRecord) -> String {
         skill.exposedRuntimes.isEmpty ? (skill.ownership == .plugin ? "Cached · activation unverified" : "No known agent route")
             : skill.exposedRuntimes.map(\.rawValue).joined(separator: ", ")
+    }
+    private func activityLabel(_ skill: SkillRecord) -> String? {
+        guard model.skillActivity != nil else { return nil }
+        let summary = activity(for: skill)
+        guard !summary.isEmpty else { return nil }
+        var parts: [String] = []
+        if summary.toolCalls > 0 { parts.append("\(summary.toolCalls) skill calls") }
+        if summary.fileReadSessions > 0 { parts.append("\(summary.fileReadSessions) read sessions") }
+        if summary.pathReferenceSessions > 0 { parts.append("\(summary.pathReferenceSessions) path sessions") }
+        if let lastSeen = summary.lastSeen { parts.append("last \(lastSeen)") }
+        return parts.joined(separator: " · ")
     }
     private var changeTray: some View {
         Panel(padding: 16) {
@@ -759,6 +849,7 @@ struct SkillLibraryView: View {
             }
             Text("Physical definition").font(.caption).foregroundStyle(DaddyTheme.muted)
             path(skill.id)
+            activityDetails(skill)
             TextField("Tags, separated by commas", text: Binding(get: { tags[skill.id, default: ""] }, set: {
                 tags[skill.id] = $0; UserDefaults.standard.set(tags, forKey: "skillLibraryTags")
             })).textFieldStyle(.roundedBorder)
@@ -784,6 +875,48 @@ struct SkillLibraryView: View {
             } else {
                 Text("Managed by \(skill.ownership == .plugin ? "the plugin installer" : "the system skill owner"). Update or remove it through that owner. Cached installation alone does not prove agent access.")
                     .font(.callout).foregroundStyle(DaddyTheme.amber)
+            }
+        }
+    }
+
+    private func activityDetails(_ skill: SkillRecord) -> some View {
+        let summary = activity(for: skill)
+        let folders = Array(Set(summary.observations.compactMap(\.project))).sorted()
+        return VStack(alignment: .leading, spacing: 7) {
+            HStack {
+                Text("Recorded activity").font(.headline)
+                Spacer()
+                if model.skillActivity == nil {
+                    Button("Read history") { Task { await model.refreshSkillActivity() } }
+                        .disabled(model.isSkillActivityLoading)
+                }
+            }
+            if model.isSkillActivityLoading && model.skillActivity == nil {
+                ProgressView("Reading local sessions…").controlSize(.small)
+            } else if model.skillActivity == nil {
+                Text("Read local sessions to see when agents called or opened this skill.")
+                    .font(.caption).foregroundStyle(DaddyTheme.muted)
+            } else if summary.isEmpty {
+                Text("No matching event in the selected window and folder. This does not establish that the skill is unused.")
+                    .font(.caption).foregroundStyle(DaddyTheme.amber)
+            } else {
+                if let label = activityLabel(skill) { Text(label).font(.callout.weight(.medium)) }
+                ForEach(AgentRuntime.allCases) { runtime in
+                    let agentActivity = SkillActivitySummary(observations: summary.observations.filter { $0.runtime == runtime })
+                    if !agentActivity.isEmpty {
+                        Text("\(runtime.rawValue): \(agentActivity.toolCalls) tool calls, \(agentActivity.fileReadSessions) read sessions, \(agentActivity.pathReferenceSessions) path-reference sessions\(agentActivity.failedToolCalls > 0 ? ", \(agentActivity.failedToolCalls) reported errors" : "")")
+                            .font(.caption).fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+                if !folders.isEmpty {
+                    Text("Folders with recorded activity").font(.caption.weight(.semibold))
+                    ForEach(Array(folders.prefix(3)), id: \.self) { folder in
+                        Text(folder.replacingOccurrences(of: FileManager.default.homeDirectoryForCurrentUser.path, with: "~"))
+                            .font(.caption2.monospaced()).foregroundStyle(DaddyTheme.muted).lineLimit(2).help(folder)
+                    }
+                }
+                Text("Skill tool calls match a name; same-name copies may share those counts. File reads match this path. Codex path references are weaker evidence than a read. Cursor dates use transcript modification time. None proves task quality.")
+                    .font(.caption2).foregroundStyle(DaddyTheme.muted).fixedSize(horizontal: false, vertical: true)
             }
         }
     }
