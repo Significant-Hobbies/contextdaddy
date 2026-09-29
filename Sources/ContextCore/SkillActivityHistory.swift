@@ -111,6 +111,10 @@ public struct SkillActivityHistory: Sendable {
 private struct Reader {
     let home: URL
     let limits: SkillActivityHistory.Limits
+    init(home: URL, limits: SkillActivityHistory.Limits) {
+        self.home = home
+        self.limits = limits
+    }
     private let manager = FileManager.default
     private let pathPattern = try! NSRegularExpression(pattern: #"(/[\w .~+@%()\-]+(?:/[\w .~+@%()\-]+)*/skills/([^/\s"'`]+)/SKILL\.md)"#, options: [.caseInsensitive])
     private var observations: [SkillActivityObservation] = []
