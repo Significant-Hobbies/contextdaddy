@@ -126,7 +126,7 @@ public struct ProviderQuotaClient: Sendable {
             if readAvailable(master, into: &bytes) { lastOutput = Date() }
             let display = ProviderQuotaParser.cleanTerminal(String(decoding: bytes, as: UTF8.self))
             if let status = try? ProviderQuotaParser.claude(display),
-               status.credits != nil || Date().timeIntervalSince(lastOutput) >= 0.9 {
+               Date().timeIntervalSince(lastOutput) >= 0.9 {
                 return status
             }
             if bytes.count >= 256 * 1024 || !process.isRunning { break }
@@ -237,9 +237,11 @@ enum ProviderQuotaParser {
         var pending: Double?
         var windows: [ProviderQuotaWindow] = []
         var credits: ProviderCreditBalance?
+        var resetCredits: UInt64?
         var plan: String?
         for raw in output.components(separatedBy: CharacterSet.newlines) {
             let line = raw.trimmingCharacters(in: .whitespaces)
+            if let count = claudeResetCount(line) { resetCredits = count }
             if plan == nil, line.contains(" · Claude ") { plan = line.components(separatedBy: " · ").dropFirst().first }
             switch line {
             case "Current session": section = .current; pending = nil; continue
@@ -282,9 +284,27 @@ enum ProviderQuotaParser {
                        ($1.id == "current" ? 0 : $1.id == "weekly" ? 1 : 2, $1.id) }
         return ProviderQuotaStatus(provider: "claude", status: "ready", source: "Claude Code /usage",
                                    checkedAt: timestamp(), plan: plan, windows: windows,
-                                   credits: credits, resetCredits: nil,
+                                   credits: credits, resetCredits: resetCredits,
                                    latestReportedResetCreditExpiryUnix: nil, resetCreditDetailsCount: nil,
                                    resetCreditsWithoutExpiryCount: nil, message: nil)
+    }
+
+    /// Claude's limit-reset notices report a count independently of paid usage
+    /// credits. Missing notices mean unknown, not zero. Do not invoke the reset
+    /// command to collect this reading: it can consume a grant.
+    private static func claudeResetCount(_ line: String) -> UInt64? {
+        guard line.hasPrefix("/limit-reset to refill your limits · ") ||
+              line.hasPrefix("Reset used · ") || line.hasPrefix("Limits reset · ") else { return nil }
+        for component in line.components(separatedBy: " · ") {
+            if component == "no resets left" { return 0 }
+            let words = component.split(separator: " ")
+            guard words.count == 3, words[2] == "left",
+                  words[1] == "reset" || words[1] == "resets",
+                  words[0].allSatisfy({ $0.isASCII && $0.isNumber }),
+                  let count = UInt64(words[0]) else { continue }
+            return count
+        }
+        return nil
     }
 
     static func cleanTerminal(_ input: String) -> String {
