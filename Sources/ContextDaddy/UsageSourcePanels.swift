@@ -84,14 +84,18 @@ struct UsageAllowanceView: View {
                         Text(creditText).font(.caption2.weight(.semibold))
                             .foregroundStyle(DaddyTheme.muted)
                         if let resets = status.resetCredits {
-                            Text("\(resets) full \(resets == 1 ? "reset" : "resets") available")
+                            Text(resetCountText(resets, provider: provider))
                                 .font(.caption2).foregroundStyle(DaddyTheme.muted)
                         }
                     } else if let resets = status?.resetCredits {
-                        Text("\(resets) full \(resets == 1 ? "reset" : "resets") available")
+                        Text(resetCountText(resets, provider: provider))
                             .font(.caption2).foregroundStyle(DaddyTheme.muted)
                     }
-                    if let status, status.resetCredits != nil {
+                    if provider == "claude", status?.resetCredits == nil {
+                        Text("Usage reset count not reported")
+                            .font(.caption2).foregroundStyle(DaddyTheme.muted)
+                    }
+                    if let status, provider == "codex", status.resetCredits != nil {
                         resetExpiry(status)
                     }
                 } else {
@@ -174,6 +178,10 @@ struct UsageAllowanceView: View {
             return "\(Int(remaining.rounded()))% credits"
         }
         return nil
+    }
+
+    private func resetCountText(_ count: UInt64, provider: String) -> String {
+        "\(count) \(provider == "claude" ? "usage" : "full") \(count == 1 ? "reset" : "resets") available"
     }
 
     @ViewBuilder private func resetExpiry(_ status: ProviderQuotaStatus) -> some View {

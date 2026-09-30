@@ -69,8 +69,41 @@ struct ProviderQuotaClientTests {
         #expect(status.windows.map(\.remainingPercent) == [97, 68])
         #expect(status.credits?.limitAmount == 150)
         #expect(status.plan == "Claude Team")
+        #expect(status.resetCredits == nil)
         #expect(throws: ProviderQuotaError.self) {
             try ProviderQuotaParser.claude("Current session\n3% used\nResets soon")
+        }
+    }
+
+    @Test func claudeProjectsReportedResetCountsSeparatelyFromPaidCredits() throws {
+        let usage = """
+        Current session
+        3% used
+        Resets 2:20am (Asia/Calcutta)
+        Current week (all models)
+        32% used
+        Resets Oct 6 at 5:30pm (Asia/Calcutta)
+        Usage credits
+        0% used
+        $0.00 / $150.00 spent · Resets Oct 1 (Asia/Calcutta)
+        """
+        let offered = try ProviderQuotaParser.claude(usage + "\n/limit-reset to refill your limits · 2 resets left · use by Oct 7")
+        #expect(offered.resetCredits == 2)
+        #expect(offered.credits?.limitAmount == 150)
+        #expect(offered.latestReportedResetCreditExpiryUnix == nil)
+        #expect(offered.resetCreditDetailsCount == nil)
+
+        let singular = try ProviderQuotaParser.claude(usage + "\n/limit-reset to refill your limits · 1 reset left · use by Oct 7")
+        #expect(singular.resetCredits == 1)
+        let depleted = try ProviderQuotaParser.claude(usage + "\nReset used · no resets left")
+        #expect(depleted.resetCredits == 0)
+        let latest = try ProviderQuotaParser.claude(usage + "\n/limit-reset to refill your limits · 2 resets left · use by Oct 7\nLimits reset · your weekly reset day stays Tuesday · 1 reset left")
+        #expect(latest.resetCredits == 1)
+
+        for notice in ["Resets Oct 7", "3 resets left", "/limit-reset to reset your session limit now · uses weekly limit · 1/week",
+                       "/limit-reset to refill your limits · -1 resets left · use by Oct 7",
+                       "/limit-reset to refill your limits · 18446744073709551616 resets left · use by Oct 7"] {
+            #expect(try ProviderQuotaParser.claude(usage + "\n" + notice).resetCredits == nil)
         }
     }
 
