@@ -1,5 +1,13 @@
 # ContextDaddy design contract
 
+Platform: native-macos
+Supported minimum width: 960
+
+Codex credit evidence reviews the native Provider allowance panel in AppKit-hosted
+SwiftUI windows at 960, 1180 and 1440 logical points, captured at the display's
+2x backing scale. Credit balance uses the existing secondary-text treatment and
+stays separate from reset grants, dollar amounts and local history.
+
 ## Selected direction
 
 Owner-directed StorageDaddy family fork: keep the A+C information architecture (live operations plus a policy ledger), but express it through StorageDaddy's warm black-and-mint visual language, rounded typography, fine outlines, and editorial Daddy doodles.

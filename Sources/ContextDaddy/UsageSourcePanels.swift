@@ -64,12 +64,12 @@ struct UsageAllowanceView: View {
                             .foregroundStyle(DaddyTheme.muted)
                     }
                     Spacer()
-                    Text(status == nil ? "NOT CHECKED" : status?.status == "ready" && !windows.isEmpty
-                         ? health(worst).0.uppercased() : "UNAVAILABLE")
+                    Text(status == nil ? "NOT CHECKED" : status?.status == "ready"
+                         ? (windows.isEmpty ? "READY" : health(worst).0.uppercased()) : "UNAVAILABLE")
                         .font(.caption2.weight(.bold))
                         .foregroundStyle(status?.status == "ready" && error == nil ? health(worst).1 : DaddyTheme.muted)
                 }
-                if status?.status == "ready", !windows.isEmpty {
+                if status?.status == "ready" {
                     ViewThatFits(in: .horizontal) {
                         HStack(alignment: .top, spacing: 14) {
                             ForEach(windows, id: \.id) { window in
@@ -80,9 +80,10 @@ struct UsageAllowanceView: View {
                             ForEach(windows, id: \.id) { window in windowValue(window) }
                         }
                     }
-                    if let status, let creditText = creditText(status) {
+                    if let status, let creditText = Self.creditText(status) {
                         Text(creditText).font(.caption2.weight(.semibold))
                             .foregroundStyle(DaddyTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
                         if let resets = status.resetCredits {
                             Text(resetCountText(resets, provider: provider))
                                 .font(.caption2).foregroundStyle(DaddyTheme.muted)
@@ -169,7 +170,20 @@ struct UsageAllowanceView: View {
         return "\(delta > 0 ? "+" : "")\(Int(delta.rounded())) pts \(delta > 0 ? "ahead of" : "behind") even pace"
     }
 
-    private func creditText(_ status: ProviderQuotaStatus) -> String? {
+    static func creditText(_ status: ProviderQuotaStatus) -> String? {
+        if status.provider == "codex" {
+            guard let credits = status.credits else { return "Credit balance not reported" }
+            if credits.unlimited == true { return "Unlimited credits" }
+            if let balance = credits.balance {
+                if balance > 0, balance < Decimal(1) / 100 {
+                    return "<\((Decimal(1) / 100).formatted(.number)) credits remaining"
+                }
+                return "\(balance.formatted(.number.precision(.fractionLength(0...2)))) credits remaining"
+            }
+            if credits.hasCredits == false { return "No credits available" }
+            if credits.hasCredits == true { return "Credits available · balance not reported" }
+            return "Credit balance not reported"
+        }
         guard let credits = status.credits else { return nil }
         if let limit = credits.limitAmount, let used = credits.usedAmount {
             return "\(max(0, limit - used).formatted(.currency(code: "USD"))) credits"
