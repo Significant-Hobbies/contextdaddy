@@ -20,7 +20,11 @@ struct PluginInventoryView: View {
     @State private var revision = 0
     private let fixture: PluginInventorySnapshot?
 
-    init(snapshot: PluginInventorySnapshot? = nil) { fixture = snapshot; _snapshot = State(initialValue: snapshot) }
+    init(snapshot: PluginInventorySnapshot? = nil, defaults: UserDefaults? = nil) {
+        fixture = snapshot
+        _snapshot = State(initialValue: snapshot)
+        _folder = AppStorage(wrappedValue: "", "skillWorkingFolder", store: defaults)
+    }
     private var matches: [PluginInventoryEntry] {
         (snapshot?.entries ?? []).filter {
             (owner == nil || $0.owner == owner) &&
@@ -122,9 +126,9 @@ struct PluginInventoryView: View {
     }
     private func summary(_ snapshot: PluginInventorySnapshot) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("\(snapshot.entries.count) \(snapshot.entries.count == 1 ? "plugin" : "plugins") found · \(snapshot.versionCount) cached \(snapshot.versionCount == 1 ? "version" : "versions")")
+            Text(PluginCountCopy.summary(snapshot))
                 .font(.headline)
-            Text("\(snapshot.repeatedPluginCount) \(snapshot.repeatedPluginCount == 1 ? "plugin has" : "plugins have") multiple versions · \(snapshot.unreferencedVersionCount) \(snapshot.unreferencedVersionCount == 1 ? "version is" : "versions are") not referenced by the checked Claude registry")
+            Text(PluginCountCopy.references(snapshot))
                 .font(.callout).foregroundStyle(DaddyTheme.muted)
             Text("Unreferenced does not mean safe to delete. Plugin managers own installation and removal.")
                 .font(.caption).foregroundStyle(DaddyTheme.amber)
@@ -150,7 +154,7 @@ struct PluginInventoryView: View {
     private var ledger: some View {
         Panel(padding: 14) {
             VStack(alignment: .leading, spacing: 0) {
-                Text("\(matches.count) \(matches.count == 1 ? "plugin" : "plugins") · grouped by owner and marketplace").font(.caption).foregroundStyle(DaddyTheme.muted).padding(.bottom, 12)
+                Text(PluginCountCopy.ledger(matches.count)).font(.caption).foregroundStyle(DaddyTheme.muted).padding(.bottom, 12)
                 ForEach(visible) { entry in
                     Button {
                         selected = entry.id
@@ -159,10 +163,10 @@ struct PluginInventoryView: View {
                             HStack(alignment: .top) {
                                 Text(entry.name).font(.headline).foregroundStyle(.primary)
                                 Spacer(minLength: 8)
-                                Text("\(entry.versions.count) \(entry.versions.count == 1 ? "version" : "versions")").font(.caption).foregroundStyle(DaddyTheme.mint)
+                                Text(PluginCountCopy.count(entry.versions.count, "version")).font(.caption).foregroundStyle(DaddyTheme.mint)
                             }
                             Text("\(entry.owner.rawValue) · \(entry.marketplace)").font(.caption).foregroundStyle(DaddyTheme.muted)
-                            Text("\(entry.skillNames.count) \(entry.skillNames.count == 1 ? "skill name" : "skill names") · \(size(entry.bytes, complete: entry.sizeComplete))")
+                            Text("\(PluginCountCopy.count(entry.skillNames.count, "skill name")) · \(size(entry.bytes, complete: entry.sizeComplete))")
                                 .font(.caption).foregroundStyle(DaddyTheme.muted)
                             Text(entry.settingLabel).font(.caption).foregroundStyle(entry.preferences.isEmpty ? DaddyTheme.amber : DaddyTheme.muted)
                         }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
@@ -213,7 +217,7 @@ struct PluginInventoryView: View {
                         ForEach(entry.versions) { version in
                             Text(version.version).font(.headline.monospaced())
                             Text(versionState(version, entry: entry)).font(.caption).foregroundStyle(DaddyTheme.amber)
-                            Text("\(size(version.bytes, complete: version.sizeComplete)) · \(version.skillNames.count) skill files").font(.caption)
+                            Text("\(size(version.bytes, complete: version.sizeComplete)) · \(PluginCountCopy.count(version.skillNames.count, "skill file"))").font(.caption)
                             if let date = version.modified { Text("Folder modified \(date.formatted(date: .abbreviated, time: .omitted)) · not last use").font(.caption).foregroundStyle(DaddyTheme.muted) }
                             path(version.path)
                             Divider()
@@ -222,7 +226,7 @@ struct PluginInventoryView: View {
                 }
                 DisclosureGroup("Included capabilities") {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("\(entry.skillNames.count) unique skill directory \(entry.skillNames.count == 1 ? "name" : "names") across cached versions. Files and declared components do not prove runtime activation.").font(.caption).foregroundStyle(DaddyTheme.muted)
+                        Text(PluginCountCopy.capabilities(entry.skillNames.count)).font(.caption).foregroundStyle(DaddyTheme.muted)
                         ForEach(entry.skillNames, id: \.self) { Text($0).font(.callout) }
                         let components = Array(Set(entry.versions.flatMap(\.components))).sorted()
                         if !components.isEmpty { Text("Also found: " + components.joined(separator: ", ")).font(.callout) }
@@ -274,5 +278,24 @@ struct PluginInventoryView: View {
         } catch is CancellationError { return }
         catch { failure = "Plugin scan could not finish. Recheck when directory access is available." }
         loading = false
+    }
+}
+
+// Shared by the actual view and fixture assertions; no layout or state behavior.
+enum PluginCountCopy {
+    static func count(_ value: Int, _ singular: String) -> String {
+        "\(value) \(singular)\(value == 1 ? "" : "s")"
+    }
+    static func summary(_ snapshot: PluginInventorySnapshot) -> String {
+        "\(count(snapshot.entries.count, "plugin")) found · \(snapshot.versionCount) cached \(snapshot.versionCount == 1 ? "version" : "versions")"
+    }
+    static func references(_ snapshot: PluginInventorySnapshot) -> String {
+        "\(snapshot.repeatedPluginCount) \(snapshot.repeatedPluginCount == 1 ? "plugin has" : "plugins have") multiple versions · \(snapshot.unreferencedVersionCount) \(snapshot.unreferencedVersionCount == 1 ? "version is" : "versions are") not referenced by the checked Claude registry"
+    }
+    static func ledger(_ count: Int) -> String {
+        "\(self.count(count, "plugin")) · grouped by owner and marketplace"
+    }
+    static func capabilities(_ count: Int) -> String {
+        "\(count) unique skill directory \(count == 1 ? "name" : "names") across cached versions. Files and declared components do not prove runtime activation."
     }
 }

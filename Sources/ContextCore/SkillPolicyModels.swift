@@ -38,6 +38,13 @@ public struct SkillExposure: Identifiable, Codable, Sendable, Equatable {
     public var id: String { logicalPath }
 }
 
+public struct SkillPrecedence: Codable, Sendable, Equatable {
+    public enum State: String, Codable, Sendable { case preferred, shadowed, coexisting, unverified }
+    public let state: State
+    public let preferredDefinitionID: String?
+    public let source: String
+}
+
 public struct SkillRuntimePolicy: Identifiable, Codable, Sendable, Equatable {
     public let runtime: AgentRuntime
     public let mode: InvocationMode
@@ -46,8 +53,10 @@ public struct SkillRuntimePolicy: Identifiable, Codable, Sendable, Equatable {
     public let invocation: String
     public let isExposed: Bool
     public let desiredMode: InvocationMode?
+    /// Resolved only among discovered routes; this never proves installed activation.
+    public let precedence: SkillPrecedence?
 
-    public init(runtime: AgentRuntime, mode: InvocationMode, explicit: Bool, reason: String, invocation: String, isExposed: Bool = true, desiredMode: InvocationMode? = nil) {
+    public init(runtime: AgentRuntime, mode: InvocationMode, explicit: Bool, reason: String, invocation: String, isExposed: Bool = true, desiredMode: InvocationMode? = nil, precedence: SkillPrecedence? = nil) {
         self.runtime = runtime
         self.mode = mode
         self.explicit = explicit
@@ -55,10 +64,11 @@ public struct SkillRuntimePolicy: Identifiable, Codable, Sendable, Equatable {
         self.invocation = invocation
         self.isExposed = isExposed
         self.desiredMode = desiredMode
+        self.precedence = precedence
     }
 
     public var id: String { runtime.rawValue }
-    public var evidence: EvidenceQuality { explicit ? .measured : .derived }
+    public var evidence: EvidenceQuality { mode == .unverified ? .unavailable : explicit ? .measured : .derived }
 }
 
 public struct SkillRecord: Identifiable, Codable, Sendable, Equatable {
@@ -68,7 +78,7 @@ public struct SkillRecord: Identifiable, Codable, Sendable, Equatable {
     public let logicalBytes: Int64
     public let modified: Date
     public let exposures: [SkillExposure]
-    public let policies: [SkillRuntimePolicy]
+    public var policies: [SkillRuntimePolicy]
     /// SHA-256 of the complete SKILL.md when it fit inside the bounded reader.
     /// A nil value means exact-copy analysis is unavailable, not that content differs.
     public let contentFingerprint: String?
