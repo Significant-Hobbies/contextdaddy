@@ -162,4 +162,14 @@ public struct AIContextDiscoveryReport: Sendable, Equatable {
     public let folderRankings: [AIContextFolderRanking]
     public let coverage: AIContextCoverage
     public let elapsed: TimeInterval
+
+    /// Allows external read-only adapters to restrict inventory before policy
+    /// resolution reads bounded skill metadata. Coverage remains the original
+    /// discovery evidence, not a claim that excluded exposures were inspected.
+    public init(items: [AIContextItem], folderRankings: [AIContextFolderRanking], coverage: AIContextCoverage, elapsed: TimeInterval) {
+        self.items = items
+        self.folderRankings = folderRankings
+        self.coverage = coverage
+        self.elapsed = elapsed
+    }
 }

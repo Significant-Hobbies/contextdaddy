@@ -3,6 +3,23 @@ import Testing
 @testable import ContextCore
 
 struct AIContextProjectsTests {
+    @Test func selectedDiscoveryRootsExcludeExternalSkillRootsAndLinkTargets() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let home = root.appendingPathComponent("home")
+        let personal = home.appendingPathComponent(".agents/skills/local")
+        let external = root.appendingPathComponent("external")
+        try FileManager.default.createDirectory(at: personal, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: external, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try "---\nname: local\n---\n".write(to: personal.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        try "---\nname: external\n---\n".write(to: external.appendingPathComponent("SKILL.md"), atomically: true, encoding: .utf8)
+        try FileManager.default.createSymbolicLink(at: personal.deletingLastPathComponent().appendingPathComponent("alias"), withDestinationURL: external)
+        let restricted = try AIContextDiscovery.discover(configuration: .init(home: home, projectRoots: [], additionalSkillRoots: [external], allowedRoots: [home]))
+        #expect(restricted.items.filter { $0.kind == .skill }.map(\.name) == ["local"])
+        let existingDefaults = try AIContextDiscovery.discover(configuration: .init(home: home, projectRoots: [], additionalSkillRoots: [external]))
+        #expect(existingDefaults.items.contains { $0.name == "external" })
+    }
+
     @Test func groupsOwnedAndInheritedContextWithoutGlobalCacheNoise() throws {
         let app = "/work/app"
         let local = item(app + "/AGENTS.md", provider: .codex, kind: .instruction)
