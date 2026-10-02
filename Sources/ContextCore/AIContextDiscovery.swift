@@ -23,12 +23,15 @@ public enum AIContextDiscovery {
         public var projectRoots: [URL]
         public var additionalRoots: [URL]
         public var additionalSkillRoots: [URL]
+        /// Optional containment boundary for external adapters. The native app retains its existing discovery defaults.
+        public var allowedRoots: [URL]?
         public var limits: Limits
         public init(home: URL = FileManager.default.homeDirectoryForCurrentUser,
-                    projectRoots: [URL]? = nil, additionalRoots: [URL] = [], additionalSkillRoots: [URL] = [], limits: Limits = .init()) {
+                    projectRoots: [URL]? = nil, additionalRoots: [URL] = [], additionalSkillRoots: [URL] = [], limits: Limits = .init(), allowedRoots: [URL]? = nil) {
             self.home = home.standardizedFileURL
             self.projectRoots = projectRoots ?? ["Desktop", "Documents", "Developer", "Projects", "Code", "src"].map { home.appendingPathComponent($0, isDirectory: true) }
             self.additionalRoots = additionalRoots; self.additionalSkillRoots = additionalSkillRoots; self.limits = limits
+            self.allowedRoots = allowedRoots
         }
     }
 
@@ -95,6 +98,15 @@ private struct State {
     var coverageRoots: [String] = []; var rankingRoots: Set<String> = []
     var notes = ["Discovery indexes file metadata only. Policy resolution may separately read up to 64 KiB from skill metadata files; instruction bodies are not read."]
     init(configuration: AIContextDiscovery.Configuration) { self.configuration = configuration }
+
+    func allows(_ url: URL) -> Bool {
+        guard let roots = configuration.allowedRoots else { return true }
+        let path = canonicalPath(url.path)
+        return roots.contains { root in
+            let selected = canonicalPath(root.path)
+            return path == selected || path.hasPrefix(selected + "/")
+        }
+    }
 
     mutating func discoverGlobals() throws {
         let home = configuration.home
@@ -251,7 +263,7 @@ private struct State {
     }
 
     mutating func skills(_ root: URL, provider: AIContextProvider, source: String, origin: AIContextOrigin, scope: AIContextScope = .global, depth: Int = 0, seen: Set<String> = [], pluginRoot: URL? = nil) throws {
-        guard depth <= configuration.limits.maximumSkillDepth, visit(plugin: pluginRoot != nil) else { return }
+        guard allows(root), depth <= configuration.limits.maximumSkillDepth, visit(plugin: pluginRoot != nil) else { return }
         let resolved = root.resolvingSymlinksInPath().standardizedFileURL
         guard isDirectory(resolved), !isBlockedForTraversal(resolved, explicitRoot: pluginRoot), !seen.contains(resolved.path) else {
             if isSymlink(root) {
@@ -281,7 +293,7 @@ private struct State {
     }
 
     mutating func namedChildren(_ root: URL, extension ext: String, provider: AIContextProvider, kind: AIContextKind, source: String, origin: AIContextOrigin, scope: AIContextScope = .project, recursive: Bool = false, depth: Int = 0) throws {
-        guard isDirectory(root) else { return }
+        guard allows(root), isDirectory(root) else { return }
         for child in children(root) {
             try Task.checkCancellation(); guard canVisit() else { return }
             if child.pathExtension.lowercased() == ext { try addNamed(child, provider: provider, scope: scope, kind: kind, origin: origin, source: source) }
@@ -296,15 +308,16 @@ private struct State {
     }
 
     mutating func addNamed(_ url: URL, provider: AIContextProvider, scope: AIContextScope, kind: AIContextKind, origin: AIContextOrigin, source: String) throws {
-        try Task.checkCancellation(); guard canVisit(), !isBlocked(url), !isSymlink(url), let info = fileInfo(url) else { return }
+        try Task.checkCancellation(); guard allows(url), canVisit(), !isBlocked(url), !isSymlink(url), let info = fileInfo(url) else { return }
         guard (info.st_mode & S_IFMT) == S_IFREG else { return }
         add(item(url: url, resolved: nil, info: info, provider: provider, scope: scope, kind: kind, origin: origin, source: source))
     }
     mutating func addNamed(_ logical: URL, resolved: URL, provider: AIContextProvider, scope: AIContextScope, kind: AIContextKind, origin: AIContextOrigin, source: String, plugin: Bool) throws {
-        try Task.checkCancellation(); guard !isSymlink(resolved), let info = fileInfo(resolved), (info.st_mode & S_IFMT) == S_IFREG else { return }
+        try Task.checkCancellation(); guard allows(logical), allows(resolved), !isSymlink(resolved), let info = fileInfo(resolved), (info.st_mode & S_IFMT) == S_IFREG else { return }
         add(item(url: logical, resolved: resolved.standardizedFileURL.path, info: info, provider: provider, scope: scope, kind: kind, origin: origin, source: source), plugin: plugin)
     }
     mutating func addSkill(logical: URL, resolved: URL, provider: AIContextProvider, scope: AIContextScope, source: String, origin: AIContextOrigin, plugin: Bool = false) throws {
+        guard allows(logical), allows(resolved) else { return }
         let physicalURL = resolved.resolvingSymlinksInPath().standardizedFileURL
         guard let info = fileInfo(physicalURL), (info.st_mode & S_IFMT) == S_IFREG else {
             if isSymlink(resolved) {
@@ -333,6 +346,7 @@ private struct State {
         pluginEntries += 1; visited += 1; return true
     }
     mutating func children(_ root: URL) -> [URL] {
+        guard allows(root) else { return [] }
         do { return try BoundedDirectoryReader.children(root).sorted { $0.path < $1.path } }
         catch {
             unreadable += 1
