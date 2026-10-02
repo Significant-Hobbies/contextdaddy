@@ -122,9 +122,9 @@ struct PluginInventoryView: View {
     }
     private func summary(_ snapshot: PluginInventorySnapshot) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("\(snapshot.entries.count) plugins found · \(snapshot.versionCount) cached versions")
+            Text("\(snapshot.entries.count) \(snapshot.entries.count == 1 ? "plugin" : "plugins") found · \(snapshot.versionCount) cached \(snapshot.versionCount == 1 ? "version" : "versions")")
                 .font(.headline)
-            Text("\(snapshot.repeatedPluginCount) plugins have multiple versions · \(snapshot.unreferencedVersionCount) versions are not referenced by the checked Claude registry")
+            Text("\(snapshot.repeatedPluginCount) \(snapshot.repeatedPluginCount == 1 ? "plugin has" : "plugins have") multiple versions · \(snapshot.unreferencedVersionCount) \(snapshot.unreferencedVersionCount == 1 ? "version is" : "versions are") not referenced by the checked Claude registry")
                 .font(.callout).foregroundStyle(DaddyTheme.muted)
             Text("Unreferenced does not mean safe to delete. Plugin managers own installation and removal.")
                 .font(.caption).foregroundStyle(DaddyTheme.amber)
@@ -150,7 +150,7 @@ struct PluginInventoryView: View {
     private var ledger: some View {
         Panel(padding: 14) {
             VStack(alignment: .leading, spacing: 0) {
-                Text("\(matches.count) plugins · grouped by owner and marketplace").font(.caption).foregroundStyle(DaddyTheme.muted).padding(.bottom, 12)
+                Text("\(matches.count) \(matches.count == 1 ? "plugin" : "plugins") · grouped by owner and marketplace").font(.caption).foregroundStyle(DaddyTheme.muted).padding(.bottom, 12)
                 ForEach(visible) { entry in
                     Button {
                         selected = entry.id
@@ -159,10 +159,10 @@ struct PluginInventoryView: View {
                             HStack(alignment: .top) {
                                 Text(entry.name).font(.headline).foregroundStyle(.primary)
                                 Spacer(minLength: 8)
-                                Text("\(entry.versions.count) versions").font(.caption).foregroundStyle(DaddyTheme.mint)
+                                Text("\(entry.versions.count) \(entry.versions.count == 1 ? "version" : "versions")").font(.caption).foregroundStyle(DaddyTheme.mint)
                             }
                             Text("\(entry.owner.rawValue) · \(entry.marketplace)").font(.caption).foregroundStyle(DaddyTheme.muted)
-                            Text("\(entry.skillNames.count) skill names · \(size(entry.bytes, complete: entry.sizeComplete))")
+                            Text("\(entry.skillNames.count) \(entry.skillNames.count == 1 ? "skill name" : "skill names") · \(size(entry.bytes, complete: entry.sizeComplete))")
                                 .font(.caption).foregroundStyle(DaddyTheme.muted)
                             Text(entry.settingLabel).font(.caption).foregroundStyle(entry.preferences.isEmpty ? DaddyTheme.amber : DaddyTheme.muted)
                         }.padding(12).frame(maxWidth: .infinity, alignment: .leading)
@@ -222,7 +222,7 @@ struct PluginInventoryView: View {
                 }
                 DisclosureGroup("Included capabilities") {
                     VStack(alignment: .leading, spacing: 10) {
-                        Text("\(entry.skillNames.count) unique skill directory names across cached versions. Files and declared components do not prove runtime activation.").font(.caption).foregroundStyle(DaddyTheme.muted)
+                        Text("\(entry.skillNames.count) unique skill directory \(entry.skillNames.count == 1 ? "name" : "names") across cached versions. Files and declared components do not prove runtime activation.").font(.caption).foregroundStyle(DaddyTheme.muted)
                         ForEach(entry.skillNames, id: \.self) { Text($0).font(.callout) }
                         let components = Array(Set(entry.versions.flatMap(\.components))).sorted()
                         if !components.isEmpty { Text("Also found: " + components.joined(separator: ", ")).font(.callout) }
