@@ -155,3 +155,7 @@ Preserve the owner-selected sortable ledger and delegated answer-first direction
 Content comparison is explicit because it reads local document bodies. Matching contents link to counterpart locations; independent scope remains a review decision. Document changes require a before/after preview, with archive consequences and guarded recovery visible. Plugin action sheets show exact owner, scope and command before applying. Activity distinguishes filtered session history from unfiltered live aggregates and gives direct folder-preserving review actions.
 
 Responsive native renders cover 390, 768 and 1440 points. These are fixture renders, not evidence that cloud memories or unsupported agent adapters are resolved. Installed interactive checks are tracked separately in artifacts/design/complete-workflows/verification.md.
+
+## Claude reset detail completion
+
+Preserve the released two-provider-card composition. Within Claude Reset grants, label Full resets and 5-hour resets separately, put each reported expiry immediately below its scope, and qualify paused or currently unusable grants. Keep failed details unknown with a visible message and the existing Claude Usage handoff. Provenance and check time remain inside the source disclosure. No redemption control is introduced.
