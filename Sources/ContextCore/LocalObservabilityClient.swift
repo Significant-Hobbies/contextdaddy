@@ -44,7 +44,7 @@ public struct LocalObservabilityClient: Sendable {
                 agents: AgentRuntime.allCases.map { runtime in
                     switch runtime {
                     case .codex:
-                        AgentTelemetry(runtime: .codex, connected: true, source: "Local OTEL · Prometheus · Tempo", signals: signalResult.signals)
+                        AgentTelemetry(runtime: .codex, connected: signalResult.signals.values.contains { $0.value != nil }, source: "Local OTEL · Prometheus · Tempo", signals: signalResult.signals)
                     case .claude:
                         claudeResult.agent
                     default:
@@ -58,42 +58,44 @@ public struct LocalObservabilityClient: Sendable {
                 sourceSchema: "codex-native-otel+claude-code-metrics/prometheus-tempo-v1"
             )
         } catch {
-            return .unavailable(reason: "Local telemetry error: \(error.localizedDescription)")
+            return .unavailable(reason: "Local telemetry error: \(Self.safeError(error))")
         }
     }
 
     private func loadAggregateSignalsOutcome() async -> SignalsOutcome {
         do { return SignalsOutcome(signals: try await loadAggregateSignals(), error: nil) }
         catch {
-            let reason = error.localizedDescription
+            let reason = Self.safeError(error)
             return SignalsOutcome(signals: unavailableSignals(reason: reason), error: reason)
         }
     }
 
     private func loadAggregateSignals() async throws -> [TelemetrySignal: TelemetryValue] {
-        async let contextTokens = queryScalar("sum(increase(codex_turn_token_usage_sum{token_type=\"total\"}[24h])) or vector(0)")
-        async let nativeToolCalls = queryScalar("sum(increase(codex_tool_call_total[24h])) or vector(0)")
-        async let apiRequests = queryScalar("sum(increase(codex_api_request_total[24h])) or vector(0)")
-        async let websocketRequests = queryScalar("sum(increase(codex_websocket_request_total[24h])) or vector(0)")
-        async let proxyRequests = queryScalar("sum(increase(codex_turn_network_proxy_total[24h])) or vector(0)")
-        let measuredNetworkCalls = try await apiRequests + websocketRequests + proxyRequests
+        async let tokens = sampleOutcome(expression: "sum(increase(codex_turn_token_usage_sum{token_type=\"total\"}[24h]))")
+        async let tools = sampleOutcome(expression: "sum(increase(codex_tool_call_total[24h]))")
+        async let api = sampleOutcome(expression: "sum(increase(codex_api_request_total[24h]))")
+        async let websocket = sampleOutcome(expression: "sum(increase(codex_websocket_request_total[24h]))")
+        async let proxy = sampleOutcome(expression: "sum(increase(codex_turn_network_proxy_total[24h]))")
+        let (tokenResult, toolResult, apiResult, websocketResult, proxyResult) = await (tokens, tools, api, websocket, proxy)
+        func metric(_ result: SamplesOutcome, unit: String, note: String) -> TelemetryValue {
+            let value = result.samples.first?.value
+            return TelemetryValue(value: value?.rounded(), unit: unit, quality: value == nil ? .unavailable : .derived,
+                                  note: result.error ?? (value == nil ? "No range samples returned; missing or one-sample series cannot establish zero activity." : note))
+        }
+        let network = [apiResult, websocketResult, proxyResult]
+        let networkValues = network.compactMap { $0.samples.first?.value }
+        let completeNetwork = networkValues.count == network.count
+        let networkTotal = networkValues.reduce(0, +)
         return [
-            .contextTokens: TelemetryValue(
-                value: try await contextTokens.rounded(), unit: "estimated tokens / 24h", quality: .derived,
-                note: "PromQL increase of the total-token counter. Short-lived one-sample series can be missed; components are shown separately."
-            ),
-            .toolCalls: TelemetryValue(
-                value: try await nativeToolCalls.rounded(), unit: "estimated invocations / 24h", quality: .derived,
-                note: "PromQL increase of Codex tool calls. Short-lived series can be missed; MCP calls can overlap."
-            ),
-            .networkCalls: TelemetryValue(
-                value: measuredNetworkCalls.rounded(), unit: "estimated logical events / 24h", quality: .derived,
-                note: "PromQL increase across API, websocket-request, and proxy events. Categories can overlap and short-lived series can be missed."
-            ),
-            .internetUsage: TelemetryValue(
-                value: nil, unit: "bytes", quality: .unavailable,
-                note: "The current OTLP stream does not measure bytes transferred."
-            ),
+            .contextTokens: metric(tokenResult, unit: "estimated tokens / 24h",
+                note: "PromQL increase of the total-token counter. Short-lived one-sample series can be missed; components are shown separately."),
+            .toolCalls: metric(toolResult, unit: "estimated invocations / 24h",
+                note: "PromQL increase of Codex tool calls. Short-lived series can be missed; MCP calls can overlap."),
+            .networkCalls: TelemetryValue(value: completeNetwork && networkTotal.isFinite ? networkTotal.rounded() : nil,
+                unit: "estimated logical events / 24h", quality: completeNetwork && networkTotal.isFinite ? .derived : .unavailable,
+                note: completeNetwork ? "PromQL increase across API, websocket-request, and proxy events. Categories can overlap." : "One or more logical-event series are unavailable; a complete total cannot be established."),
+            .internetUsage: TelemetryValue(value: nil, unit: "bytes", quality: .unavailable,
+                note: "The current OTLP stream does not measure bytes transferred."),
         ]
     }
 
@@ -117,7 +119,7 @@ public struct LocalObservabilityClient: Sendable {
                                    sessions: try await sessions, costs: try await costs,
                                    presence: try await presence)
         } catch {
-            let reason = error.localizedDescription
+            let reason = Self.safeError(error)
             return ClaudeLoad(agent: adapter(for: .claude), sections: [], error: reason)
         }
     }
@@ -239,7 +241,7 @@ public struct LocalObservabilityClient: Sendable {
 
     private func sampleOutcome(expression: String) async -> SamplesOutcome {
         do { return SamplesOutcome(samples: try await querySamples(expression), error: nil) }
-        catch { return SamplesOutcome(samples: [], error: error.localizedDescription) }
+        catch { return SamplesOutcome(samples: [], error: Self.safeError(error)) }
     }
 
     private func items(_ outcome: SamplesOutcome?, label: String, unit: String,
@@ -283,7 +285,7 @@ public struct LocalObservabilityClient: Sendable {
                 URLQueryItem(name: "end", value: String(Int(now.timeIntervalSince1970))),
             ]
             let (data, response) = try await session.data(from: components.url!)
-            try requireSuccess(response: response, data: data, source: "Tempo session search")
+            try requireSuccess(response: response, source: "Tempo session search")
             let payload = try JSONDecoder().decode(TempoSearchResponse.self, from: data)
             let runs = payload.traces.compactMap { trace -> OTelRun? in
                 guard let nanos = Double(trace.startTimeUnixNano) else { return nil }
@@ -298,7 +300,7 @@ public struct LocalObservabilityClient: Sendable {
             }.sorted { $0.startedAt > $1.startedAt }
             return RunsOutcome(runs: runs, error: nil)
         } catch {
-            return RunsOutcome(runs: [], error: "Tempo recent sessions unavailable: \(error.localizedDescription)")
+            return RunsOutcome(runs: [], error: "Tempo recent sessions unavailable: \(Self.safeError(error))")
         }
     }
 
@@ -314,20 +316,30 @@ public struct LocalObservabilityClient: Sendable {
         )!
         components.queryItems = [URLQueryItem(name: "query", value: expression)]
         let (data, response) = try await session.data(from: components.url!)
-        try requireSuccess(response: response, data: data, source: "Prometheus query")
+        try requireSuccess(response: response, source: "Prometheus query")
         let payload = try JSONDecoder().decode(PrometheusResponse.self, from: data)
         guard payload.status == "success" else { throw URLError(.cannotParseResponse) }
-        return payload.data.result.compactMap { result in
-            Double(result.rawValue).map { PrometheusSample(metric: result.metric, value: $0) }
+        return try payload.data.result.map { result in
+            guard let value = Double(result.rawValue), value.isFinite, value >= 0 else {
+                throw LocalObservabilityError.invalidSample
+            }
+            return PrometheusSample(metric: result.metric, value: value)
         }
     }
 
-    private func requireSuccess(response: URLResponse, data: Data, source: String) throws {
+    private func requireSuccess(response: URLResponse, source: String) throws {
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             let status = (response as? HTTPURLResponse)?.statusCode ?? -1
-            let body = String(data: data, encoding: .utf8)?.prefix(180) ?? ""
-            throw LocalObservabilityError.queryRejected(status: status, source: source, body: String(body))
+            throw LocalObservabilityError.queryRejected(status: status, source: source)
         }
+    }
+
+    // Never forward provider bodies, URLs, decoding debug descriptions or userInfo.
+    private static func safeError(_ error: Error) -> String {
+        if let error = error as? LocalObservabilityError { return error.localizedDescription }
+        if let error = error as? URLError { return "Telemetry transport failed (code \(error.code.rawValue))." }
+        if error is DecodingError { return "Telemetry response could not be decoded." }
+        return "Telemetry request failed. Error content was omitted."
     }
 
     private func adapter(for runtime: AgentRuntime) -> AgentTelemetry {
@@ -378,12 +390,13 @@ struct PrometheusSample: Sendable, Equatable {
 }
 
 enum LocalObservabilityError: LocalizedError {
-    case queryRejected(status: Int, source: String, body: String)
+    case queryRejected(status: Int, source: String)
+    case invalidSample
 
     var errorDescription: String? {
         switch self {
-        case let .queryRejected(status, source, body):
-            "\(source) returned HTTP \(status): \(body)"
+        case let .queryRejected(status, source): "\(source) returned HTTP \(status). Response content was omitted."
+        case .invalidSample: "Telemetry returned an invalid numeric sample."
         }
     }
 }
