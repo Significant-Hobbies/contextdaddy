@@ -1,9 +1,9 @@
 {
-  "version": "0.2.4",
-  "build": 14,
-  "filename": "ContextDaddy-0.2.4-14-arm64.dmg",
-  "path": "/downloads/ContextDaddy-0.2.4-14-arm64.dmg",
-  "sha256": "1e07971777d1d1d3d265e862fc664e7d13409cbe18f0f29c0a729620f7d609e3",
-  "bytes": 7323956,
-  "sourceSha": "2e1ff50622e1e09cf2a91b3310d0bb974dc03a6e"
+  "version": "0.2.5",
+  "build": 15,
+  "filename": "ContextDaddy-0.2.5-15-arm64.dmg",
+  "path": "/downloads/ContextDaddy-0.2.5-15-arm64.dmg",
+  "sha256": "7b8ae837ae4b74a23432e886f227c34076b533c8742206b0feef2e7473984ced",
+  "bytes": 7339012,
+  "sourceSha": "8764689e85e2616d5f6e9e083aa1a054eb8436e1"
 }
