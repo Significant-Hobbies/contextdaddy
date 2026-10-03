@@ -64,53 +64,72 @@ struct UsageAllowanceView: View {
                             .foregroundStyle(DaddyTheme.muted)
                     }
                     Spacer()
-                    Text(status == nil ? "NOT CHECKED" : status?.status == "ready"
+                    Text(error != nil ? (status == nil ? "UNAVAILABLE" : "STALE") : status == nil ? "NOT CHECKED" : status?.status == "ready"
                          ? (windows.isEmpty ? "READY" : health(worst).0.uppercased()) : "UNAVAILABLE")
                         .font(.caption2.weight(.bold))
-                        .foregroundStyle(status?.status == "ready" && error == nil ? health(worst).1 : DaddyTheme.muted)
+                        .foregroundStyle(error != nil ? DaddyTheme.amber : status?.status == "ready" ? health(worst).1 : DaddyTheme.muted)
                 }
                 if status?.status == "ready" {
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 14) {
-                            ForEach(windows, id: \.id) { window in
-                                windowValue(window).frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                        }
-                        VStack(alignment: .leading, spacing: 12) {
-                            ForEach(windows, id: \.id) { window in windowValue(window) }
+                    HStack(alignment: .top, spacing: 14) {
+                        ForEach(windows, id: \.id) { window in
+                            windowValue(window).frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
-                    if let status, let creditText = Self.creditText(status) {
-                        Text(creditText).font(.caption2.weight(.semibold))
-                            .foregroundStyle(DaddyTheme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                        if let resets = status.resetCredits {
-                            Text(resetCountText(resets, provider: provider))
-                                .font(.caption2).foregroundStyle(DaddyTheme.muted)
+                    if let status {
+                        Divider().overlay(DaddyTheme.line)
+                        HStack(alignment: .top, spacing: 16) {
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text(provider == "claude" ? "PAID USAGE CREDITS" : "CREDIT BALANCE")
+                                    .font(.caption2.weight(.bold)).foregroundStyle(DaddyTheme.muted)
+                                Text(Self.creditText(status) ?? "Not reported")
+                                    .font(.callout.weight(.semibold)).monospacedDigit()
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }.frame(maxWidth: .infinity, alignment: .leading)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Text("RESET GRANTS")
+                                    .font(.caption2.weight(.bold)).foregroundStyle(DaddyTheme.muted)
+                                Text(Self.resetCountText(status))
+                                    .font(.callout.weight(.semibold)).monospacedDigit()
+                                    .fixedSize(horizontal: false, vertical: true)
+                                if provider == "claude", status.resetCredits == nil {
+                                    Text("Claude Code did not report a count.")
+                                        .font(.caption2).foregroundStyle(DaddyTheme.muted)
+                                    claudeUsageLink
+                                }
+                                if provider == "codex", status.resetCredits != nil {
+                                    resetExpiry(status)
+                                }
+                            }.frame(maxWidth: .infinity, alignment: .leading)
                         }
-                    } else if let resets = status?.resetCredits {
-                        Text(resetCountText(resets, provider: provider))
-                            .font(.caption2).foregroundStyle(DaddyTheme.muted)
-                    }
-                    if provider == "claude", status?.resetCredits == nil {
-                        Text("Usage reset count not reported")
-                            .font(.caption2).foregroundStyle(DaddyTheme.muted)
-                    }
-                    if let status, provider == "codex", status.resetCredits != nil {
-                        resetExpiry(status)
                     }
                 } else {
                     Text(status?.message ?? "Check both allowances for an account reading.")
                         .font(.caption).foregroundStyle(DaddyTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
+                    if provider == "claude", error != nil { claudeUsageLink }
                 }
                 if let error {
                     Text("Latest check failed; any saved reading may be stale. \(error)")
                         .font(.caption2).foregroundStyle(DaddyTheme.amber)
                 }
                 if let status {
-                    Text("\(status.source) · \(status.checkedAt)")
-                        .font(.caption2).foregroundStyle(DaddyTheme.muted).lineLimit(1)
+                    Divider().overlay(DaddyTheme.line)
+                    DisclosureGroup("Source & reading details") {
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(status.source)
+                            Text("Checked · \(status.checkedAt)")
+                            if provider == "codex",
+                               let nonExpiring = status.resetCreditsWithoutExpiryCount, nonExpiring > 0,
+                               status.latestReportedResetCreditExpiryUnix != nil {
+                                Text("\(nonExpiring) reported \(nonExpiring == 1 ? "grant has" : "grants have") no expiry.")
+                            }
+                        }
+                        .font(.caption2).foregroundStyle(DaddyTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.top, 5)
+                    }.font(.caption).foregroundStyle(DaddyTheme.muted)
                 }
             }.frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -145,13 +164,14 @@ struct UsageAllowanceView: View {
             if let pace = paceLabel(window) {
                 Text(pace).font(.caption2.monospaced()).foregroundStyle(DaddyTheme.muted)
             }
-            if let reset = window.resetDescription {
-                Text("Resets \(reset)").font(.caption2.monospaced()).foregroundStyle(DaddyTheme.muted)
+            if let reset = Self.windowResetText(window) {
+                Text(reset).font(.caption2.monospaced()).foregroundStyle(DaddyTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(minWidth: 0, maxWidth: 190, alignment: .leading)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(window.label), \(Int(window.remainingPercent.rounded())) percent remaining")
+        .accessibilityLabel("\(window.label), \(Int(window.remainingPercent.rounded())) percent remaining. \(Self.windowResetText(window) ?? "")")
     }
 
     private func health(_ remaining: Double) -> (String, Color) {
@@ -194,8 +214,27 @@ struct UsageAllowanceView: View {
         return nil
     }
 
-    private func resetCountText(_ count: UInt64, provider: String) -> String {
-        "\(count) \(provider == "claude" ? "usage" : "full") \(count == 1 ? "reset" : "resets") available"
+    static let claudeUsageURL = URL(string: "https://claude.ai/settings/usage")!
+
+    private var claudeUsageLink: some View {
+        Link(destination: Self.claudeUsageURL) {
+            HStack(spacing: 3) {
+                Text("View Claude Usage")
+                Image(systemName: "arrow.up.right")
+            }.font(.caption2)
+        }
+        .buttonStyle(.plain).foregroundStyle(DaddyTheme.mint)
+    }
+
+    static func resetCountText(_ status: ProviderQuotaStatus) -> String {
+        guard let count = status.resetCredits else { return "Not reported" }
+        return "\(count) \(status.provider == "claude" ? "usage" : "full") \(count == 1 ? "reset" : "resets") available"
+    }
+
+    static func windowResetText(_ window: ProviderQuotaWindow) -> String? {
+        if let description = window.resetDescription { return "Resets \(description)" }
+        guard let unix = window.resetsAtUnix else { return nil }
+        return "Resets \(Date(timeIntervalSince1970: TimeInterval(unix)).formatted(date: .abbreviated, time: .shortened))"
     }
 
     @ViewBuilder private func resetExpiry(_ status: ProviderQuotaStatus) -> some View {
@@ -204,16 +243,11 @@ struct UsageAllowanceView: View {
                 .font(.caption2.weight(.semibold)).foregroundStyle(DaddyTheme.muted)
         } else if (status.resetCredits ?? 0) > 0 {
             Text(status.resetCreditsWithoutExpiryCount == status.resetCredits
-                 ? "Reported credits do not expire" : "Reset-credit expiry unavailable")
-                .font(.caption2).foregroundStyle(DaddyTheme.muted)
-        }
-        if let nonExpiring = status.resetCreditsWithoutExpiryCount, nonExpiring > 0,
-           status.latestReportedResetCreditExpiryUnix != nil {
-            Text("\(nonExpiring) reported \(nonExpiring == 1 ? "credit has" : "credits have") no expiry.")
+                 ? "Reported reset grants do not expire" : "Reset-grant expiry unavailable")
                 .font(.caption2).foregroundStyle(DaddyTheme.muted)
         }
         if let details = status.resetCreditDetailsCount, details < (status.resetCredits ?? 0) {
-            Text("Only \(details) of \(status.resetCredits ?? 0) credit details reported; a later expiry may exist.")
+            Text("Only \(details) of \(status.resetCredits ?? 0) grant details reported; a later expiry may exist.")
                 .font(.caption2).foregroundStyle(DaddyTheme.amber)
         }
     }
