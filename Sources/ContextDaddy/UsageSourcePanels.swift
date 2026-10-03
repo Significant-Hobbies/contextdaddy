@@ -33,7 +33,7 @@ struct UsageAllowanceView: View {
                 .onChange(of: model.autoCheckAllowance) { _, enabled in
                     if enabled { Task { await model.autoRefreshQuotasIfNeeded() } }
                 }
-            Text("Account-level allowance is separate from local tokens. Checks may contact Codex and Claude; automatic checks are opt-in and run at most once every 15 minutes.")
+            Text("Account-level allowance is separate from local tokens. Checks may contact Codex and Claude; Claude reset details use its existing sign-in, read-only. Automatic checks are opt-in and run at most once every 15 minutes.")
                 .font(.caption2).foregroundStyle(DaddyTheme.muted)
         }.frame(maxWidth: .infinity, alignment: .leading)
             .task { await model.autoRefreshQuotasIfNeeded() }
@@ -88,13 +88,21 @@ struct UsageAllowanceView: View {
                             VStack(alignment: .leading, spacing: 6) {
                                 Text("RESET GRANTS")
                                     .font(.caption2.weight(.bold)).foregroundStyle(DaddyTheme.muted)
-                                Text(Self.resetCountText(status))
-                                    .font(.callout.weight(.semibold)).monospacedDigit()
-                                    .fixedSize(horizontal: false, vertical: true)
-                                if provider == "claude", status.resetCredits == nil {
+                                if let grants = status.claudeResetGrants, provider == "claude" {
+                                    claudeGrantRows(grants)
+                                } else {
+                                    Text(Self.resetCountText(status))
+                                        .font(.callout.weight(.semibold)).monospacedDigit()
+                                        .fixedSize(horizontal: false, vertical: true)
+                                }
+                                if provider == "claude", status.claudeResetGrants == nil, status.resetCredits == nil {
                                     Text("Claude Code did not report a count.")
                                         .font(.caption2).foregroundStyle(DaddyTheme.muted)
                                     claudeUsageLink
+                                }
+                                if let error = status.resetGrantError {
+                                    Text(error).font(.caption2).foregroundStyle(DaddyTheme.amber)
+                                        .fixedSize(horizontal: false, vertical: true)
                                 }
                                 if provider == "codex", status.resetCredits != nil {
                                     resetExpiry(status)
@@ -118,6 +126,11 @@ struct UsageAllowanceView: View {
                         VStack(alignment: .leading, spacing: 5) {
                             Text(status.source)
                             Text("Checked · \(status.checkedAt)")
+                            if let message = status.message { Text(message) }
+                            if let grants = status.claudeResetGrants {
+                                Text("Claude OAuth usage · reset grants")
+                                Text("Reset details checked · \(grants.checkedAt)")
+                            }
                             if provider == "codex",
                                let nonExpiring = status.resetCreditsWithoutExpiryCount, nonExpiring > 0,
                                status.latestReportedResetCreditExpiryUnix != nil {
@@ -229,6 +242,30 @@ struct UsageAllowanceView: View {
     static func resetCountText(_ status: ProviderQuotaStatus) -> String {
         guard let count = status.resetCredits else { return "Not reported" }
         return "\(count) \(status.provider == "claude" ? "usage" : "full") \(count == 1 ? "reset" : "resets") available"
+    }
+
+    static func claudeGrantCountText(_ count: UInt64, kind: String) -> String {
+        "\(kind == "full" ? "Full resets" : "5-hour resets") · \(count == 0 ? "None" : "\(count) left")"
+    }
+
+    @ViewBuilder private func claudeGrantRows(_ summary: ClaudeResetGrantSummary) -> some View {
+        ForEach(["full", "five-hour"], id: \.self) { kind in
+            VStack(alignment: .leading, spacing: 4) {
+                Text(Self.claudeGrantCountText(kind == "full" ? summary.fullCount : summary.fiveHourCount, kind: kind))
+                    .font(.callout.weight(.semibold)).monospacedDigit()
+                    .fixedSize(horizontal: false, vertical: true)
+                ForEach(summary.grants.indices.filter { summary.grants[$0].kind == kind }, id: \.self) { index in
+                    let grant = summary.grants[index]
+                    Text("\(grant.count == 1 ? "Expires" : "\(grant.count) expire") · \(Date(timeIntervalSince1970: TimeInterval(grant.expiresAtUnix)).formatted(date: .abbreviated, time: .omitted))")
+                        .font(.caption2).foregroundStyle(DaddyTheme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                    if grant.paused || !grant.usableNow {
+                        Text(grant.paused ? "Paused" : "Not usable right now")
+                            .font(.caption2).foregroundStyle(DaddyTheme.amber)
+                    }
+                }
+            }
+        }
     }
 
     static func windowResetText(_ window: ProviderQuotaWindow) -> String? {

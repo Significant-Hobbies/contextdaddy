@@ -27,15 +27,60 @@ public struct ProviderQuotaClient: Sendable {
 
     public func loadQuota(for service: UsageService) async throws -> ProviderQuotaReceipt {
         guard let key = service.quotaKey else { throw ProviderQuotaError.unsupportedProvider }
-        let status = try await Task.detached(priority: .userInitiated) {
+        let reading = try await Task.detached(priority: .userInitiated) { () throws -> (status: ProviderQuotaStatus?, version: String?) in
             switch key {
-            case "codex": try collectCodex()
-            case "claude": try collectClaude()
+            case "codex": return (try collectCodex(), nil)
+            case "claude":
+                do { return try collectClaude() }
+                catch {
+                    guard let url = resolve("claude", explicit: claudeURL) else { throw ProviderQuotaError.missingCLI("Claude") }
+                    return (nil, claudeVersion(at: url))
+                }
             default: throw ProviderQuotaError.unsupportedProvider
             }
         }.value
+        var status = reading.status
+        if key == "claude" {
+            do {
+                let remote = try await ClaudeResetGrantReader().load(cliVersion: reading.version)
+                status = ClaudeResetGrantReader.mergingCLIDetails(status, into: remote)
+            } catch {
+                guard status != nil else { throw ProviderQuotaError.requestFailed("Claude") }
+                status?.resetGrantError = (error as? ClaudeResetGrantError)?.errorDescription ?? "Claude reset-grant check failed."
+            }
+        }
+        guard let status else { throw ProviderQuotaError.requestFailed("Claude") }
         return ProviderQuotaReceipt(schemaVersion: "contextdaddy.provider-quota/v1",
                                     generatedAt: ISO8601DateFormatter().string(from: Date()), providers: [status])
+    }
+
+    private func claudeVersion(at url: URL) -> String? {
+        let filename = url.resolvingSymlinksInPath().lastPathComponent
+        if filename.range(of: #"^[0-9]+\.[0-9]+\.[0-9]+$"#, options: .regularExpression) != nil { return filename }
+        let process = Process()
+        process.executableURL = url
+        process.arguments = ["--version"]
+        process.standardInput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        let fd = pipe.fileHandleForReading.fileDescriptor
+        _ = fcntl(fd, F_SETFL, O_NONBLOCK)
+        do { try process.run() } catch { return nil }
+        defer { stop(process) }
+        var data = Data()
+        let deadline = Date().addingTimeInterval(2)
+        while Date() < deadline, data.count < 4096 {
+            _ = readAvailable(fd, into: &data)
+            if !process.isRunning { break }
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+        _ = readAvailable(fd, into: &data)
+        guard data.count < 4096 else { return nil }
+        let output = String(decoding: data, as: UTF8.self)
+        guard output.contains("Claude Code"),
+              let range = output.range(of: #"[0-9]+\.[0-9]+\.[0-9]+"#, options: .regularExpression) else { return nil }
+        return String(output[range])
     }
 
     private func collectCodex() throws -> ProviderQuotaStatus {
@@ -85,7 +130,7 @@ public struct ProviderQuotaClient: Sendable {
         throw ProviderQuotaError.requestFailed("Codex")
     }
 
-    private func collectClaude() throws -> ProviderQuotaStatus {
+    private func collectClaude() throws -> (status: ProviderQuotaStatus, version: String?) {
         guard let url = resolve("claude", explicit: claudeURL) else { throw ProviderQuotaError.missingCLI("Claude") }
         var master: Int32 = -1
         var slave: Int32 = -1
@@ -96,9 +141,15 @@ public struct ProviderQuotaClient: Sendable {
         defer { if master >= 0 { close(master) }; if slave >= 0 { close(slave) } }
         _ = fcntl(master, F_SETFL, O_NONBLOCK)
         let process = Process()
-        process.executableURL = url
-        process.arguments = ["--safe-mode", "--ax-screen-reader"]
+        // A GUI Process has no controlling terminal. macOS script establishes
+        // one for the CLI; /dev/null prevents a terminal transcript on disk.
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/script")
+        process.arguments = ["-q", "/dev/null", url.path, "--safe-mode", "--ax-screen-reader"]
         process.currentDirectoryURL = FileManager.default.temporaryDirectory
+        var environment = ProcessInfo.processInfo.environment
+        environment["TERM"] = "dumb"
+        environment.removeValue(forKey: "COLORTERM")
+        process.environment = environment
         let terminal = FileHandle(fileDescriptor: slave, closeOnDealloc: false)
         process.standardInput = terminal
         process.standardOutput = terminal
@@ -106,14 +157,24 @@ public struct ProviderQuotaClient: Sendable {
         do { try process.run() } catch { throw ProviderQuotaError.requestFailed("Claude") }
         close(slave)
         slave = -1
-        defer { stop(process) }
+        defer {
+            // Ask the interactive CLI to quit before closing script's terminal.
+            // Killing only script can otherwise leave its CLI child alive.
+            let quit = Array("\u{3}\u{3}".utf8)
+            _ = write(master, quit, quit.count)
+            let deadline = Date().addingTimeInterval(0.5)
+            while process.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.02) }
+            close(master)
+            master = -1
+            stop(process)
+        }
         var bytes = Data()
         let startup = Date().addingTimeInterval(5)
         var lastOutput = Date()
+        // The version banner can precede the interactive command handler. A
+        // quiet gap after it is not proof that /usage can accept input yet.
         while Date() < startup {
             if readAvailable(master, into: &bytes) { lastOutput = Date() }
-            let display = ProviderQuotaParser.cleanTerminal(String(decoding: bytes, as: UTF8.self))
-            if display.contains("Claude Code v"), Date().timeIntervalSince(lastOutput) >= 0.4 { break }
             if !process.isRunning { break }
             Thread.sleep(forTimeInterval: 0.05)
         }
@@ -127,7 +188,7 @@ public struct ProviderQuotaClient: Sendable {
             let display = ProviderQuotaParser.cleanTerminal(String(decoding: bytes, as: UTF8.self))
             if let status = try? ProviderQuotaParser.claude(display),
                Date().timeIntervalSince(lastOutput) >= 0.9 {
-                return status
+                return (status, ProviderQuotaParser.claudeVersion(display))
             }
             if bytes.count >= 256 * 1024 || !process.isRunning { break }
             Thread.sleep(forTimeInterval: 0.05)
@@ -171,6 +232,11 @@ public struct ProviderQuotaClient: Sendable {
 }
 
 enum ProviderQuotaParser {
+    static func claudeVersion(_ display: String) -> String? {
+        guard let range = display.range(of: #"Claude Code v[0-9]+\.[0-9]+\.[0-9]+"#, options: .regularExpression) else { return nil }
+        return String(display[range]).replacingOccurrences(of: "Claude Code v", with: "")
+    }
+
     static func codex(_ response: [String: Any]) throws -> ProviderQuotaStatus {
         guard response["error"] == nil, let result = response["result"] as? [String: Any] else {
             throw ProviderQuotaError.requestFailed("Codex")

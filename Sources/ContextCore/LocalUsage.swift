@@ -383,6 +383,8 @@ public struct ProviderQuotaStatus: Decodable, Sendable {
     public let latestReportedResetCreditExpiryUnix: Int64?
     public let resetCreditDetailsCount: UInt64?
     public let resetCreditsWithoutExpiryCount: UInt64?
+    public var claudeResetGrants: ClaudeResetGrantSummary? = nil
+    public var resetGrantError: String? = nil
     public let message: String?
 
     enum CodingKeys: String, CodingKey {
@@ -392,6 +394,8 @@ public struct ProviderQuotaStatus: Decodable, Sendable {
         case latestReportedResetCreditExpiryUnix = "latest_reported_reset_credit_expiry_unix"
         case resetCreditDetailsCount = "reset_credit_details_count"
         case resetCreditsWithoutExpiryCount = "reset_credits_without_expiry_count"
+        case claudeResetGrants = "claude_reset_grants"
+        case resetGrantError = "reset_grant_error"
     }
 }
 

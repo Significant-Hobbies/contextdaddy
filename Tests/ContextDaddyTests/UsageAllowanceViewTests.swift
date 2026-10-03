@@ -38,6 +38,40 @@ struct UsageAllowanceViewTests {
         let window = try JSONDecoder().decode(ProviderQuotaWindow.self, from:
             Data(#"{"id":"current","label":"Current window","remaining_percent":80,"reset_description":"8:30pm (Asia/Calcutta)"}"#.utf8))
         #expect(UsageAllowanceView.windowResetText(window) == "Resets 8:30pm (Asia/Calcutta)")
+        #expect(UsageAllowanceView.claudeGrantCountText(1, kind: "full") == "Full resets · 1 left")
+        #expect(UsageAllowanceView.claudeGrantCountText(0, kind: "five-hour") == "5-hour resets · None")
+        #expect(UsageAllowanceView.claudeGrantCountText(2, kind: "five-hour") == "5-hour resets · 2 left")
+    }
+
+    @Test func rendersScopedClaudeResetGrantsAndUnavailableDetails() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent()
+        let directory = root.appendingPathComponent("artifacts/design/claude-grants/after", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let model = ContextDaddyModel(discover: { _ in throw CancellationError() })
+        let originalAutoCheck = model.autoCheckAllowance
+        defer { model.autoCheckAllowance = originalAutoCheck }
+        model.autoCheckAllowance = false
+        model.show(.overview)
+        let fixture = #"{"schema_version":"contextdaddy.provider-quota/v1","generated_at":"2026-10-03T12:00:00Z","providers":[{"provider":"codex","status":"ready","source":"codex app-server account/rateLimits/read","checked_at":"2026-10-03T12:00:00Z","plan":"pro","windows":[{"id":"weekly","label":"Weekly window","remaining_percent":70,"reset_description":"Oct 10 at 2:43am"}],"credits":{"balance":12345.67},"reset_credits":2},{"provider":"claude","status":"ready","source":"Claude Code /usage","checked_at":"2026-10-03T12:00:00Z","plan":"Claude Team","windows":[{"id":"current","label":"Current window","remaining_percent":80,"reset_description":"8:30pm (Asia/Calcutta)"},{"id":"weekly","label":"Weekly window","remaining_percent":60,"reset_description":"Oct 4 at 5:30pm (Asia/Calcutta)"}],"credits":{"used_amount":25,"limit_amount":150},"claude_reset_grants":{"fullCount":1,"fiveHourCount":0,"checkedAt":"2026-10-03T12:00:01Z","grants":[{"kind":"full","count":1,"expiresAtUnix":1918915200,"paused":false,"usableNow":true}]}}]}"#
+        let receipt = try JSONDecoder().decode(ProviderQuotaReceipt.self, from: Data(fixture.utf8))
+        model.quotaReceipts["codex"] = receipt
+        model.quotaReceipts["claude"] = receipt
+        for width in [960, 1180, 1440] {
+            try render(model, width: width, height: 740, to: directory.appendingPathComponent("grants-\(width).png"))
+        }
+        var unavailable = try #require(JSONSerialization.jsonObject(with: Data(fixture.utf8)) as? [String: Any])
+        var providers = try #require(unavailable["providers"] as? [[String: Any]])
+        providers[1].removeValue(forKey: "claude_reset_grants")
+        providers[1]["reset_grant_error"] = "Claude reset-grant check failed. Try checking again."
+        unavailable["providers"] = providers
+        model.quotaReceipts["claude"] = try JSONDecoder().decode(ProviderQuotaReceipt.self,
+                                                               from: JSONSerialization.data(withJSONObject: unavailable))
+        try render(model, width: 960, height: 740, to: directory.appendingPathComponent("unavailable-960.png"))
+        let pausedJSON = fixture.replacingOccurrences(of: "\"fiveHourCount\":0", with: "\"fiveHourCount\":2")
+            .replacingOccurrences(of: "\"grants\":[", with: "\"grants\":[{\"kind\":\"five-hour\",\"count\":2,\"expiresAtUnix\":1928915200,\"paused\":true,\"usableNow\":false},")
+        model.quotaReceipts["claude"] = try JSONDecoder().decode(ProviderQuotaReceipt.self, from: Data(pausedJSON.utf8))
+        try render(model, width: 960, height: 740, to: directory.appendingPathComponent("paused-960.png"))
     }
 
     /// Focused native evidence; no local-history scan or provider call is needed.
