@@ -3,6 +3,16 @@
 Platform: native-macos
 Supported minimum width: 960
 
+Issue #1 native acceptance captures the actual RootView shell with synthetic
+policy and redundancy records at 960×640, 1180×740 and 1440×900 logical points
+using AppKit-hosted SwiftUI at 2x backing scale. The fixture disables automatic
+refresh so it does not inspect private agent configuration or call providers.
+The policy/redundancy mode control uses the existing labelled choice menu when
+the five segmented labels cannot fit. Summary explanations wrap instead of
+truncating their evidence limits. Compact views retain one scroll surface and
+the separate cache, handoff and empty states. This verifies source UI behavior;
+it does not qualify a published or installed release.
+
 Codex credit evidence reviews the native Provider allowance panel in AppKit-hosted
 SwiftUI windows at 960, 1180 and 1440 logical points, captured at the display's
 2x backing scale. Credit balance uses the existing secondary-text treatment and

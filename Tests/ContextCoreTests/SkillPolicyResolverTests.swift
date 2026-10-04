@@ -3,6 +3,33 @@ import Testing
 @testable import ContextCore
 
 struct SkillPolicyResolverTests {
+    @Test func unreadableDefinitionNeverClaimsAutomaticInvocation() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let skill = root.appendingPathComponent(".claude/skills/oversized/SKILL.md")
+        try FileManager.default.createDirectory(at: skill.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try String(repeating: "x", count: 65 * 1024).write(to: skill, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let records = SkillPolicyResolver.resolve(report: try AIContextDiscovery.discover(configuration: .init(home: root, projectRoots: []))).records
+        let policy = try #require(records.first?.policy(for: .claude))
+        #expect(policy.isExposed)
+        #expect(policy.mode == .unverified)
+        #expect(policy.evidence == .unavailable)
+        #expect(policy.reason.contains("could not be read"))
+    }
+
+    @Test func claudeDisablingBothInvocationRoutesIsDisabled() throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let skill = root.appendingPathComponent(".claude/skills/disabled/SKILL.md")
+        try FileManager.default.createDirectory(at: skill.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "---\nname: disabled\ndescription: Neither route enabled\ndisable-model-invocation: true\nuser-invocable: false\n---\n".write(to: skill, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let records = SkillPolicyResolver.resolve(report: try AIContextDiscovery.discover(configuration: .init(home: root, projectRoots: []))).records
+        let policy = try #require(records.first?.policy(for: .claude))
+        #expect(policy.mode == .disabled)
+        #expect(policy.desiredMode == .disabled)
+        #expect(policy.explicit)
+    }
+
     @Test func claudeFrontmatterDoesNotDisableCodexImplicitInvocation() throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         let skill = root.appendingPathComponent(".agents/skills/manual/SKILL.md")

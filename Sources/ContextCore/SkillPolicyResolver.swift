@@ -114,6 +114,7 @@ public enum SkillPolicyResolver {
                 name: name,
                 physicalPath: physicalPath,
                 metadata: metadata,
+                documentReadable: document.fingerprint != nil,
                 activeProviders: activeProviders,
                 installedProviders: installedProviders
             )
@@ -135,6 +136,7 @@ public enum SkillPolicyResolver {
         name: String,
         physicalPath: String,
         metadata: Frontmatter,
+        documentReadable: Bool,
         activeProviders: Set<AIContextProvider>,
         installedProviders: Set<AIContextProvider>
     ) -> SkillRuntimePolicy {
@@ -155,6 +157,12 @@ public enum SkillPolicyResolver {
                 invocation: invocation,
                 isExposed: false
             )
+        }
+
+        guard documentReadable else {
+            return SkillRuntimePolicy(runtime: runtime, mode: .unverified, explicit: false,
+                reason: "SKILL.md could not be read within the 64 KiB safety bound; invocation controls are unavailable.",
+                invocation: invocation)
         }
 
         if runtime == .codex {
@@ -181,6 +189,11 @@ public enum SkillPolicyResolver {
         if runtime == .grok, let raw = metadata.rawUserInvocable, raw != "true" {
             return SkillRuntimePolicy(runtime: runtime, mode: .disabled, explicit: true,
                                       reason: "Grok hides this skill from both user and model because user-invocable is not literal true.", invocation: invocation)
+        }
+        if runtime == .claude, metadata.disableModelInvocation == true, metadata.userInvocable == false {
+            return SkillRuntimePolicy(runtime: runtime, mode: .disabled, explicit: true,
+                reason: "SKILL.md disables both model invocation and direct user invocation.",
+                invocation: invocation, desiredMode: .disabled)
         }
         if metadata.disableModelInvocation == true {
             return SkillRuntimePolicy(

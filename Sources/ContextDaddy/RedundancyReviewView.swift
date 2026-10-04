@@ -190,7 +190,8 @@ struct RedundancyReviewView: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(value.formatted()).font(.title3.bold()).monospacedDigit().foregroundStyle(color)
                 Text(title).font(.caption.weight(.semibold))
-                Text(detail).font(.caption2).foregroundStyle(DaddyTheme.muted).lineLimit(1)
+                Text(detail).font(.caption2).foregroundStyle(DaddyTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
@@ -291,7 +292,7 @@ private struct RedundancyFindingRow: View {
                     Divider().overlay(DaddyTheme.line)
                     evidenceSection
                     membersSection
-                    Label("ContextDaddy never deletes or rewrites skill files.", systemImage: "lock.shield")
+                    Label("This review never deletes or rewrites skill files.", systemImage: "lock.shield")
                         .font(.caption2).foregroundStyle(DaddyTheme.mint)
                 }
             }
