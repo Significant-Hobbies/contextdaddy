@@ -15,6 +15,7 @@ public enum SkillPolicyResolver {
         var records = groups.compactMap { physicalPath, items in
             makeRecord(physicalPath: physicalPath, items: items)
         }
+        records = resolvePrecedence(records)
         let recordsByName = Dictionary(grouping: records, by: { $0.name.lowercased() })
         records = records.map { record in
             var record = record
@@ -24,8 +25,70 @@ public enum SkillPolicyResolver {
             }
             record.definitionConflictCount = max(1, overlapping.count)
             return record
-        }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        }.sorted {
+            let order = $0.name.localizedCaseInsensitiveCompare($1.name)
+            return order == .orderedSame ? $0.id < $1.id : order == .orderedAscending
+        }
         return SkillCatalogSnapshot(records: records, coverage: report.coverage, generatedAt: Date())
+    }
+
+    private static func resolvePrecedence(_ records: [SkillRecord]) -> [SkillRecord] {
+        let byName = Dictionary(grouping: records, by: { $0.name.lowercased() })
+        return records.map { original in
+            var record = original
+            record.policies = original.policies.map { policy in
+                let peers = byName[record.name.lowercased(), default: []].filter { $0.policy(for: policy.runtime)?.isExposed == true }
+                guard policy.isExposed, peers.count > 1 else { return policy }
+                var state = SkillPrecedence.State.unverified
+                var preferred: String?
+                var source = "No qualified winner rule for this runtime or these routes."
+                var reason = "Same-name precedence is unverified; no winner was inferred from scan order."
+                // The inventory can contain legacy or malformed names even though
+                // the shared skill-name convention is lowercase. Never infer a
+                // winner across case-only variants of one apparent name.
+                if Set(peers.map(\.name)).count > 1 {
+                    reason = "Case-only name collision is unverified; no winner was inferred."
+                }
+                // Scope is not enough: recognize only direct skill-directory routes,
+                // excluding nested/custom roots, plugin namespaces and renamed frontmatter.
+                func routes(_ item: SkillRecord) -> [SkillExposure] {
+                    item.exposures.filter { $0.provider == .claude && $0.applicability != .installedOnly }
+                }
+                func ordinary(_ item: SkillRecord) -> Bool {
+                    let exposures = routes(item)
+                    return !exposures.isEmpty && exposures.allSatisfy {
+                        $0.logicalPath.hasSuffix("/.claude/skills/\(item.name)/SKILL.md") &&
+                        (($0.scope == .global && $0.source == "Claude · Personal skills") || $0.scope == .project)
+                    }
+                }
+                if Set(peers.map(\.name)).count == 1, policy.runtime == .claude, peers.allSatisfy(ordinary) {
+                    let personal = peers.filter { routes($0).contains { $0.scope == .global } }
+                    if personal.count == 1, let winner = personal.first {
+                        preferred = winner.id
+                        state = record.id == winner.id ? .preferred : .shadowed
+                        source = "https://code.claude.com/docs/en/skills#resolve-skills-that-share-a-name"
+                        reason = state == .shadowed
+                            ? "Shadowed among discovered Claude routes by personal definition \(winner.id). Personal skills override project skills."
+                            : "Preferred among discovered Claude routes: personal skills override project skills."
+                        reason += " Enterprise, synced skills and session overrides were not qualified; runtime activation remains unverified."
+                    }
+                } else if Set(peers.map(\.name)).count == 1, policy.runtime == .codex, peers.allSatisfy({ item in
+                    item.exposures.filter { [.codex, .agents].contains($0.provider) && $0.applicability != .installedOnly }
+                        .allSatisfy { $0.logicalPath.contains("/.agents/skills/") }
+                }) {
+                    state = .coexisting
+                    source = "https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills"
+                    reason = "Codex can list both same-name skills; these discovered routes have no exclusive winner. Runtime activation remains unverified."
+                }
+                return SkillRuntimePolicy(runtime: policy.runtime,
+                    mode: state == .shadowed || state == .unverified ? .unverified : policy.mode,
+                    explicit: state == .shadowed || state == .unverified ? false : policy.explicit,
+                    reason: policy.reason + " " + reason, invocation: policy.invocation,
+                    isExposed: policy.isExposed, desiredMode: policy.desiredMode,
+                    precedence: SkillPrecedence(state: state, preferredDefinitionID: preferred, source: source))
+            }
+            return record
+        }
     }
 
     private static func makeRecord(physicalPath: String, items: [AIContextItem]) -> SkillRecord? {

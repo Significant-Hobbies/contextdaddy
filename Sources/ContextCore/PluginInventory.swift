@@ -63,7 +63,7 @@ public struct PluginInventoryEntry: Sendable, Equatable, Identifiable {
         return preferences[0].enabled ? "Enabled in checked settings" : "Disabled in checked settings"
     }
     public var reviewReason: String {
-        if !unreferencedVersions.isEmpty { return "\(unreferencedVersions.count) versions not referenced by the checked registry" }
+        if !unreferencedVersions.isEmpty { return "\(unreferencedVersions.count) \(unreferencedVersions.count == 1 ? "version" : "versions") not referenced by the checked registry" }
         if versions.count > 1 { return "\(versions.count) cached versions; current installation needs verification" }
         if !localMatches.isEmpty { return "Matching instructions also exist in your local library" }
         if preferences.isEmpty { return "Check whether this plugin is enabled" }
