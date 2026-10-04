@@ -59,6 +59,8 @@ Plugin/system definitions are read-only in this workflow and identify their owni
 swift run ContextDaddy
 ```
 
+ContextDaddy remains available in the menu bar after its window closes. **Open ContextDaddy** reopens the review window; **Refresh Local Context** scans local skill/context metadata without starting provider allowance or usage-history checks. Quit reviews ongoing model-owned background reads. See [branch reconciliation](docs/project-reconciliation.md).
+
 The app requires macOS 14 or newer. Its Codex adapter reads the loopback-only local telemetry stack and renders Prometheus metrics and Tempo sessions inside ContextDaddy. A separate Claude adapter reads Claude Code metrics from the same local Prometheus path only if Claude exports to that collector; ContextDaddy does not enable or reroute Claude telemetry. The rest of the product still works when either source is absent or partial.
 
 ContextDaddy runs [ccusage](https://github.com/ccusage/ccusage) 20.0.24 directly in offline mode for local history. The packaged app carries its own pinned helper and [MIT acknowledgement](CONTEXTDADDY_NOTICES.md); no CodeVetter installation or CLI is needed at runtime. A **Refresh history** action rescans local logs. **Check allowance** separately calls Codex app-server and Claude Code `/usage` through their installed CLIs. Claude's usage endpoint supplies allowance windows and reset grants from one read, while the CLI supplies plan and paid-credit details. If the CLI display fails, those unreported details remain unavailable. Opt-in automatic checking uses the same adapters with a 15-minute minimum interval. These readings are not ccusage totals.

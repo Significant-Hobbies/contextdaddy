@@ -7,20 +7,28 @@ struct ContextDaddyApp: App {
     @State private var model = ContextDaddyModel()
 
     var body: some Scene {
-        WindowGroup {
+        Window("ContextDaddy", id: "main") {
             RootView()
                 .environment(model)
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 960, minHeight: 640)
+                .onAppear { appDelegate.activeWork = { model.activeWorkDescription } }
         }
         .defaultSize(width: 1180, height: 740)
         .defaultPosition(.center)
         .windowStyle(.titleBar)
+        MenuBarExtra {
+            ContextMenu(model: model)
+        } label: {
+            Label("ContextDaddy", systemImage: "square.stack.3d.up")
+        }
+        .menuBarExtraStyle(.menu)
     }
 }
 
 @MainActor
 final class ContextDaddyAppDelegate: NSObject, NSApplicationDelegate {
+    var activeWork: (() -> String?)?
     func applicationDidFinishLaunching(_ notification: Notification) {
         NSApplication.shared.applicationIconImage = ContextDoodleArt.appIcon()
         DispatchQueue.main.async {
@@ -40,5 +48,28 @@ final class ContextDaddyAppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidBecomeActive(_ notification: Notification) {
         NSApplication.shared.applicationIconImage = ContextDoodleArt.appIcon()
+    }
+    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
+
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        DaddyQuitReview.shouldQuit(appName: "ContextDaddy", activeWork: activeWork?()) ? .terminateNow : .terminateCancel
+    }
+
+}
+
+struct ContextMenu: View {
+    let model: ContextDaddyModel
+
+    var body: some View {
+        DaddyMenuStatus(message: model.contextMenuStatus)
+        if let lastRefresh = model.lastSuccessfulRefreshAt {
+            Text("Last refresh: \(lastRefresh.formatted(date: .abbreviated, time: .shortened))")
+        }
+        Divider()
+        DaddyMenuOpenButton(appName: "ContextDaddy")
+        Button("Refresh Local Context") { Task { await model.refreshSkillLibrary() } }
+            .disabled(model.isLoading)
+        Divider()
+        DaddyMenuQuitButton(appName: "ContextDaddy")
     }
 }

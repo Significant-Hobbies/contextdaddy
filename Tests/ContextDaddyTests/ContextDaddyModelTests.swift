@@ -30,13 +30,52 @@ struct ContextDaddyModelTests {
         #expect(model.sourcesMode == .diagnostics)
     }
 
+    @Test func menuDoesNotClaimReadyBeforeDiscovery() {
+        let model = ContextDaddyModel()
+        #expect(model.contextMenuStatus == "Local context not scanned yet")
+        model.lastError = "Fixture failure"
+        #expect(model.contextMenuStatus == "Last refresh needs attention")
+        model.isLoading = true
+        #expect(model.contextMenuStatus == "Refreshing local context…")
+    }
+
+    @Test func quitReviewIncludesEveryModelOwnedBackgroundRead() {
+        let model = ContextDaddyModel()
+        #expect(model.activeWorkDescription == nil)
+        let flags: [ReferenceWritableKeyPath<ContextDaddyModel, Bool>] = [
+            \.isLoading, \.isContextRefreshRunning, \.isSkillFolderLoading, \.isVerifyingSkillIssues,
+            \.isVerifyingConfigurationIssues, \.isUsageLoading, \.isDevinLoading,
+            \.isTelemetryLoading, \.isSkillActivityLoading, \.isQuotaLoading,
+        ]
+        for flag in flags {
+            model[keyPath: flag] = true
+            #expect(model.activeWorkDescription != nil)
+            model[keyPath: flag] = false
+            #expect(model.activeWorkDescription == nil)
+        }
+    }
+
+    @Test func closingLastWindowKeepsTheMenuAppAvailable() {
+        let delegate = ContextDaddyAppDelegate()
+        #expect(!delegate.applicationShouldTerminateAfterLastWindowClosed(.shared))
+        #expect(DaddyQuitReview.shouldQuit(appName: "ContextDaddy", activeWork: nil))
+    }
+
     @Test func failedLibraryRefreshPreservesPreviousDiscovery() async {
         let source = LockedDiscoveryResults([.success(report(elapsed: 0.25)), .failure(.expected)])
         let model = ContextDaddyModel { _ in try source.next() }
         await model.refreshSkillLibrary()
         let previous = model.catalog
+        let lastSuccess = model.lastSuccessfulRefreshAt
+        #expect(lastSuccess != nil)
+        #expect(model.contextMenuStatus == "Ready for local review")
+        #expect(model.usageReport == nil)
+        #expect(!model.isUsageLoading)
+        #expect(!model.isQuotaLoading)
         await model.refreshSkillLibrary()
         #expect(model.catalog == previous)
+        #expect(model.lastSuccessfulRefreshAt == lastSuccess)
+        #expect(model.contextMenuStatus == "Last refresh needs attention")
         #expect(model.lastError != nil)
         #expect(!model.isLoading)
     }
