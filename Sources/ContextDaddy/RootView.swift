@@ -4,6 +4,8 @@ import SwiftUI
 
 struct RootView: View {
     @Environment(ContextDaddyModel.self) private var model
+    /// Disable automatic refresh for a supplied, already-loaded preview model.
+    var refreshOnAppear = true
 
     var body: some View {
         @Bindable var model = model
@@ -105,7 +107,7 @@ struct RootView: View {
         }
         .frame(width: viewport.size.width, height: viewport.size.height)
         }
-        .task { await model.refresh() }
+        .task { if refreshOnAppear { await model.refresh() } }
         .preferredColorScheme(.dark)
         .tint(DaddyTheme.mint)
         .buttonStyle(ContextDaddyButtonStyle())
@@ -353,12 +355,20 @@ struct SkillsLedgerView: View {
     }
 
     private var skillsModePicker: some View {
-        ContextModeToggle(
-            title: "Skills view",
-            selection: Bindable(model).skillsMode,
-            choices: SkillsMode.allCases.map { ContextChoice($0, $0.rawValue) }
-        )
-        .frame(width: 420)
+        ViewThatFits(in: .horizontal) {
+            ContextModeToggle(
+                title: "Skills view",
+                selection: Bindable(model).skillsMode,
+                choices: SkillsMode.allCases.map { ContextChoice($0, $0.rawValue) }
+            )
+            .frame(width: 680)
+            ContextChoiceMenu(
+                title: "Skills view",
+                selection: Bindable(model).skillsMode,
+                choices: SkillsMode.allCases.map { ContextChoice($0, $0.rawValue) },
+                width: 260
+            )
+        }
     }
 
     private var runtimePicker: some View {

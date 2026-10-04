@@ -13,6 +13,8 @@ The primary user is a developer running Codex, Claude, Cursor, Devin, or Grok on
 - One physical skill is one ledger record, even when it has many logical exposures.
 - The primary navigation follows user decisions: Usage, Skills, and OpenTelemetry. Project files and instructions remain a secondary inspector; working-folder selection lives directly in Skills. Raw source files and configuration diagnostics remain available as secondary Files & diagnostics, not competing representations of skills.
 - Policy is runtime-specific and explains whether it is explicit or derived.
+- Definitions that cannot be read within the bounded metadata limit retain their discovered routes but have unavailable invocation controls. Claude definitions that disable both user and model invocation are disabled, rather than manual-only.
+- Precedence applies only to qualified discovered routes: ordinary Claude personal skills override ordinary project definitions; Codex shared-root duplicates coexist. Custom routes, case-only collisions and unsupported vendor winner rules remain unverified, with no winner inferred from enumeration order. These states do not prove installed runtime activation.
 - Non-auto skills show how to invoke them.
 - One selected-agent skill-access view makes automatic, manual-only, model-only, disabled, undiscoverable, and review-needed policy directly filterable.
 - Installed cache evidence never masquerades as active runtime exposure.
