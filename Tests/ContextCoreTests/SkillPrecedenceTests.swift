@@ -65,15 +65,30 @@ struct SkillPrecedenceTests {
         #expect(policy.mode == .manualOnly)
     }
 
+    @Test func caseOnlyNameCollisionsRemainUnverifiedIndependentOfInputOrder() throws {
+        let home = try fixture()
+        let personal = try skill(home, ".claude/skills/Shared", name: "Shared")
+        let project = try skill(home, "work/.claude/skills/shared", name: "shared")
+        let report = try AIContextDiscovery.discover(configuration: .init(home: home, projectRoots: [home.appendingPathComponent("work")]))
+        let forward = SkillPolicyResolver.resolve(report: report)
+        let reversed = SkillPolicyResolver.resolve(report: AIContextDiscoveryReport(items: report.items.reversed(), folderRankings: report.folderRankings, coverage: report.coverage, elapsed: report.elapsed))
+        let records = [try #require(forward.records.first { $0.id == personal.path }), try #require(forward.records.first { $0.id == project.path })]
+        #expect(records.allSatisfy { $0.definitionConflictCount == 2 })
+        #expect(records.allSatisfy { $0.policy(for: .claude)?.mode == .unverified })
+        #expect(records.allSatisfy { $0.policy(for: .claude)?.precedence?.state == .unverified })
+        #expect(records.allSatisfy { $0.policy(for: .claude)?.precedence?.preferredDefinitionID == nil })
+        #expect(forward.records == reversed.records)
+    }
+
     private func fixture() throws -> URL {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("ContextDaddy-precedence-" + UUID().uuidString).resolvingSymlinksInPath()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
         return root
     }
-    private func skill(_ root: URL, _ relative: String) throws -> URL {
+    private func skill(_ root: URL, _ relative: String, name: String = "shared") throws -> URL {
         let file = root.appendingPathComponent(relative + "/SKILL.md")
         try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
-        try "---\nname: shared\ndescription: Synthetic precedence fixture\n---\n".write(to: file, atomically: true, encoding: .utf8)
+        try "---\nname: \(name)\ndescription: Synthetic precedence fixture\n---\n".write(to: file, atomically: true, encoding: .utf8)
         return file
     }
 }

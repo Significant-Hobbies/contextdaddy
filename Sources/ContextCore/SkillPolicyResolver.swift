@@ -33,16 +33,22 @@ public enum SkillPolicyResolver {
     }
 
     private static func resolvePrecedence(_ records: [SkillRecord]) -> [SkillRecord] {
-        let byName = Dictionary(grouping: records, by: \.name)
+        let byName = Dictionary(grouping: records, by: { $0.name.lowercased() })
         return records.map { original in
             var record = original
             record.policies = original.policies.map { policy in
-                let peers = byName[record.name, default: []].filter { $0.policy(for: policy.runtime)?.isExposed == true }
+                let peers = byName[record.name.lowercased(), default: []].filter { $0.policy(for: policy.runtime)?.isExposed == true }
                 guard policy.isExposed, peers.count > 1 else { return policy }
                 var state = SkillPrecedence.State.unverified
                 var preferred: String?
                 var source = "No qualified winner rule for this runtime or these routes."
                 var reason = "Same-name precedence is unverified; no winner was inferred from scan order."
+                // The inventory can contain legacy or malformed names even though
+                // the shared skill-name convention is lowercase. Never infer a
+                // winner across case-only variants of one apparent name.
+                if Set(peers.map(\.name)).count > 1 {
+                    reason = "Case-only name collision is unverified; no winner was inferred."
+                }
                 // Scope is not enough: recognize only direct skill-directory routes,
                 // excluding nested/custom roots, plugin namespaces and renamed frontmatter.
                 func routes(_ item: SkillRecord) -> [SkillExposure] {
@@ -55,7 +61,7 @@ public enum SkillPolicyResolver {
                         (($0.scope == .global && $0.source == "Claude · Personal skills") || $0.scope == .project)
                     }
                 }
-                if policy.runtime == .claude, peers.allSatisfy(ordinary) {
+                if Set(peers.map(\.name)).count == 1, policy.runtime == .claude, peers.allSatisfy(ordinary) {
                     let personal = peers.filter { routes($0).contains { $0.scope == .global } }
                     if personal.count == 1, let winner = personal.first {
                         preferred = winner.id
@@ -66,7 +72,7 @@ public enum SkillPolicyResolver {
                             : "Preferred among discovered Claude routes: personal skills override project skills."
                         reason += " Enterprise, synced skills and session overrides were not qualified; runtime activation remains unverified."
                     }
-                } else if policy.runtime == .codex, peers.allSatisfy({ item in
+                } else if Set(peers.map(\.name)).count == 1, policy.runtime == .codex, peers.allSatisfy({ item in
                     item.exposures.filter { [.codex, .agents].contains($0.provider) && $0.applicability != .installedOnly }
                         .allSatisfy { $0.logicalPath.contains("/.agents/skills/") }
                 }) {
