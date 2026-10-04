@@ -3,15 +3,15 @@ import ContextCore
 import SwiftUI
 
 enum DaddyTheme {
-    static let canvas = Color.black
-    static let panel = Color.black
+    static let canvas = DaddyPalette.canvas
+    static let panel = DaddyPalette.canvas
     static let raised = Color(red: 0.055, green: 0.075, blue: 0.066)
     static let line = mint.opacity(0.2)
-    static let muted = Color(red: 0.78, green: 0.90, blue: 0.86)
-    static let mint = Color(red: 0.42, green: 0.79, blue: 0.62)
-    static let blue = Color(red: 0.33, green: 0.58, blue: 0.83)
-    static let amber = Color(red: 0.87, green: 0.67, blue: 0.28)
-    static let coral = Color(red: 0.90, green: 0.46, blue: 0.40)
+    static let muted = DaddyPalette.secondaryInk
+    static let mint = DaddyPalette.mint
+    static let blue = DaddyPalette.blue
+    static let amber = DaddyPalette.amber
+    static let coral = DaddyPalette.coral
 
     static func color(for quality: EvidenceQuality) -> Color {
         switch quality {
@@ -61,18 +61,8 @@ struct Panel<Content: View>: View {
 
 struct ContextDaddyButtonStyle: ButtonStyle {
     var prominent = false
-    @Environment(\.isEnabled) private var isEnabled
-
     func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 13, weight: .medium))
-            .padding(.horizontal, 11)
-            .padding(.vertical, 7)
-            .foregroundStyle(prominent ? Color.black : DaddyTheme.mint)
-            .background(prominent ? DaddyTheme.mint : Color.black, in: RoundedRectangle(cornerRadius: 7))
-            .overlay(RoundedRectangle(cornerRadius: 7).stroke(DaddyTheme.mint.opacity(prominent ? 1 : 0.35)))
-            .opacity(isEnabled ? (configuration.isPressed ? 0.7 : 1) : 0.4)
-            .contentShape(RoundedRectangle(cornerRadius: 7))
+        DaddyControlStyle(prominent: prominent).makeBody(configuration: configuration)
     }
 }
 

@@ -169,3 +169,16 @@ Responsive native renders cover 390, 768 and 1440 points. These are fixture rend
 ## Claude reset detail completion
 
 Preserve the released two-provider-card composition. Within Claude Reset grants, label Full resets and 5-hour resets separately, put each reported expiry immediately below its scope, and qualify paused or currently unusable grants. Keep failed details unknown with a visible message and the existing Claude Usage handoff. Provenance and check time remain inside the source disclosure. No redemption control is introduced.
+
+## Native command menu
+
+On 5 October 2026, the owner selected direction A, the native command menu, from
+three rendered systems. The menu follows macOS typography and row geometry;
+the existing black/mint full window, title bar, Daddy imagery and paired landing
+remain the review system. Never-scanned, refreshing, failed and ready status stay
+explicit, with last-success time retained after a failed scan. Context refresh
+is separate from provider checks. Closing the window retains the menu; Open
+returns to the same model, and active model-owned reads trigger native quit review.
+Native fixture captures cover the supported minimum 960×640, standard 1180×740
+and wide 1440×900 logical points, at the display's 2x scale. Interactive menu
+checks use synthetic discovery and do not qualify a published or installed build.

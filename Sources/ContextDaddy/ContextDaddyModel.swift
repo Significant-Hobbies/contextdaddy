@@ -135,6 +135,8 @@ final class ContextDaddyModel {
     var pendingSkillInvocation: InvocationMode?
     var pendingSkillAllFolders = false
     var isLoading = false
+    var isContextRefreshRunning = false
+    var lastSuccessfulRefreshAt: Date?
     var loadStarted = Date()
     var discoveryStatus = "Not scanned yet"
     var lastError: String?
@@ -151,6 +153,23 @@ final class ContextDaddyModel {
             (UserDefaults.standard.stringArray(forKey: "contextDaddySkillRoots") ?? []).map { URL(fileURLWithPath: $0) }))
     }) {
         self.discover = discover
+    }
+
+    var contextMenuStatus: String {
+        if isLoading { return "Refreshing local context…" }
+        if lastError != nil { return "Last refresh needs attention" }
+        return lastSuccessfulRefreshAt == nil ? "Local context not scanned yet" : "Ready for local review"
+    }
+
+    var activeWorkDescription: String? {
+        if isLoading || isContextRefreshRunning || isSkillFolderLoading || isVerifyingSkillIssues || isVerifyingConfigurationIssues {
+            return "A local context review is still running."
+        }
+        if isUsageLoading || isDevinLoading { return "Local usage history is still being read." }
+        if isTelemetryLoading { return "Local telemetry is still being read." }
+        if isSkillActivityLoading { return "Skill activity history is still being read." }
+        if isQuotaLoading { return "A provider allowance check is still running." }
+        return nil
     }
 
     func show(_ destination: AppSection) {
@@ -339,6 +358,7 @@ final class ContextDaddyModel {
             discoveryReport = loaded.0
             catalog = loaded.1
             projects = loaded.2
+            lastSuccessfulRefreshAt = Date()
             discoveryStatus = "\(loaded.1.physicalSkillCount) physical skills · \(loaded.1.exposureCount) locations"
         } catch {
             lastError = error.localizedDescription
@@ -349,12 +369,13 @@ final class ContextDaddyModel {
         Task { await refreshUsage() }
         let request = UUID()
         refreshGeneration = request
+        isContextRefreshRunning = true
         isLoading = true
         loadStarted = Date()
         discoveryStatus = discoveryReport == nil ? "Reading local context metadata…" : "Refreshing while previous results remain available…"
         lastError = nil
         defer {
-            if refreshGeneration == request { isLoading = false }
+            if refreshGeneration == request { isLoading = false; isContextRefreshRunning = false }
         }
         let roots = extraRoots.map { URL(fileURLWithPath: $0, isDirectory: true) }
         let discover = self.discover
@@ -370,6 +391,7 @@ final class ContextDaddyModel {
             discoveryReport = loaded.0
             catalog = loaded.1
             projects = loaded.2
+            lastSuccessfulRefreshAt = Date()
             discoveryStatus = "\(loaded.2.count.formatted()) projects · \(loaded.0.items.count.formatted()) file locations · \(String(format: "%.1f", loaded.0.elapsed)) s"
         } catch {
             guard refreshGeneration == request else { return }
