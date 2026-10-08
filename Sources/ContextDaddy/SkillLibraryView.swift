@@ -8,6 +8,12 @@ private enum SkillActivityFilter: String, CaseIterable {
     case noEvidence = "No evidence"
 }
 
+private struct SkillOrganizationRequest: Identifiable {
+    let id = UUID()
+    let action: SkillOrganizationAction
+    let records: [SkillRecord]
+}
+
 struct SkillLibraryView: View {
     @Environment(ContextDaddyModel.self) private var model
     @AppStorage("skillLibrarySearch") private var query = ""
@@ -19,8 +25,7 @@ struct SkillLibraryView: View {
     @State private var scopeFilter: AIContextScope?
     @State private var sortField: SkillSortField = .name
     @State private var ascending = true
-    @State private var organizationAction: SkillOrganizationAction?
-    @State private var organizationRecords: [SkillRecord] = []
+    @State private var organizationRequest: SkillOrganizationRequest?
     @State private var duplicateCounts: [String: Int] = [:]
     @State private var indexedRecords: [SkillRecord] = []
     private var selectedRecords: [SkillRecord] { records.filter { checked.contains($0.id) } }
@@ -169,8 +174,8 @@ struct SkillLibraryView: View {
             if let failure = model.skillFolderError { error = failure }
         }
 
-        .sheet(item: $organizationAction) { action in
-            SkillOrganizationSheet(action: action, records: organizationRecords, manager: manager) {
+        .sheet(item: $organizationRequest) { request in
+            SkillOrganizationSheet(action: request.action, records: request.records, manager: manager) {
                 checked.removeAll()
                 await refreshLibrary()
             }
@@ -1110,9 +1115,9 @@ struct SkillLibraryView: View {
     }
 
     private func openOrganization(_ action: SkillOrganizationAction) {
-        organizationRecords = action == .cleanup && checked.isEmpty
+        let reviewedRecords = action == .cleanup && checked.isEmpty
             ? ownedRecords.filter { mapSkillIDs?.contains($0.id) ?? true } : selectedRecords
-        organizationAction = action
+        organizationRequest = SkillOrganizationRequest(action: action, records: reviewedRecords)
     }
 
     private func resetPage() { rebuildIndex(); page = 0; selectedID = nil; document = nil }
