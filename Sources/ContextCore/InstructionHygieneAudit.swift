@@ -211,7 +211,7 @@ public enum InstructionHygieneAudit {
                 root.path, 1, "Repoint each link to the skill's current source, or remove the dead link after confirming the source was retired.")
         }
 
-        private var checkedSkills = Set<String>()
+        var checkedSkills = Set<String>()
         mutating func skill(_ document: URL, folderName: String, runtime: AgentRuntime) {
             guard checkedSkills.insert(InstructionImports.canonical(document.path)).inserted else { return }
             guard let text = InstructionImports.readText(document) else {
