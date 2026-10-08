@@ -43,10 +43,11 @@ public enum AIContextDiscovery {
         try state.discoverPlugins()
         try state.discoverSelectedSkillRoots()
         let items = state.items.values.sorted { ($0.path, $0.id) < ($1.path, $1.id) }
-        let rankings = rank(items: items, roots: state.rankingRoots, home: configuration.home)
+        let rankings = rank(items: items, roots: state.rankingRoots, home: configuration.home, allows: { [state] in state.allows($0) })
         var coverage = AIContextCoverage(roots: state.coverageRoots, visitedEntries: state.visited,
                 itemLimitReached: state.itemLimitReached, entryLimitReached: state.entryLimitReached,
-                unreadableCount: state.unreadable, skippedLinks: state.skippedLinks, notes: state.notes)
+                unreadableCount: state.unreadable, skippedLinks: state.skippedLinks, notes: state.notes + state.brokenLinkNotes)
+        coverage.brokenSkillLinks = state.brokenSkillLinks
         coverage.projectDepthReached = state.projectDepthReached
         coverage.skillDepthReached = state.skillDepthReached
         coverage.pluginEntryLimitReached = state.pluginEntryLimitReached
@@ -76,8 +77,9 @@ public enum AIContextDiscovery {
         var coverage = AIContextCoverage(roots: state.coverageRoots, visitedEntries: state.visited,
             itemLimitReached: state.itemLimitReached, entryLimitReached: state.entryLimitReached,
             unreadableCount: state.unreadable, skippedLinks: state.skippedLinks,
-            notes: state.notes + ["Targeted folder scan. Plugin activation and live prompt loading are not verified; plugin caches are excluded."])
+            notes: state.notes + state.brokenLinkNotes + ["Targeted folder scan. Plugin activation and live prompt loading are not verified; plugin caches are excluded."])
         coverage.skillDepthReached = state.skillDepthReached
+        coverage.brokenSkillLinks = state.brokenSkillLinks
         return AIContextDiscoveryReport(items: items, folderRankings: rankings(items: items, in: root, home: home),
             coverage: coverage, elapsed: Date().timeIntervalSince(started))
     }
@@ -91,12 +93,16 @@ private struct State {
     let configuration: AIContextDiscovery.Configuration
     var items: [String: AIContextItem] = [:]
     var pluginItems = 0; var pluginEntries = 0
-    var visited = 0; var unreadable = 0; var skippedLinks = 0
+    var visited = 0; var unreadable = 0; var skippedLinks = 0; var brokenSkillLinks = 0
     var itemLimitReached = false; var entryLimitReached = false
     var projectDepthReached = false; var skillDepthReached = false
     var pluginEntryLimitReached = false; var pluginItemLimitReached = false
     var coverageRoots: [String] = []; var rankingRoots: Set<String> = []
-    var notes = ["Discovery indexes file metadata only. Policy resolution may separately read up to 64 KiB from skill metadata files; instruction bodies are not read."]
+    var notes = ["Discovery indexes file metadata. Claude instruction files are read (up to 256 KiB each) only to resolve @imports for startup estimates. Policy resolution may separately read up to 64 KiB from skill metadata files."]
+    /// One summary instead of per-link notes; Setup health lists each affected skills folder.
+    var brokenLinkNotes: [String] {
+        brokenSkillLinks == 0 ? [] : ["\(brokenSkillLinks) broken or unreadable skill \(brokenSkillLinks == 1 ? "link" : "links"). Setup health lists them per skills folder."]
+    }
     init(configuration: AIContextDiscovery.Configuration) { self.configuration = configuration }
 
     func allows(_ url: URL) -> Bool {
@@ -267,10 +273,7 @@ private struct State {
         let resolved = root.resolvingSymlinksInPath().standardizedFileURL
         guard isDirectory(resolved), !isBlockedForTraversal(resolved, explicitRoot: pluginRoot), !seen.contains(resolved.path) else {
             if isSymlink(root) {
-                skippedLinks += 1
-                if notes.filter({ $0.hasPrefix("Broken or unreadable skill link:") }).count < 20 {
-                    notes.append("Broken or unreadable skill link: \(root.path)")
-                }
+                skippedLinks += 1; brokenSkillLinks += 1
             }
             return
         }
@@ -321,10 +324,7 @@ private struct State {
         let physicalURL = resolved.resolvingSymlinksInPath().standardizedFileURL
         guard let info = fileInfo(physicalURL), (info.st_mode & S_IFMT) == S_IFREG else {
             if isSymlink(resolved) {
-                skippedLinks += 1
-                if notes.filter({ $0.hasPrefix("Broken or unreadable skill link:") }).count < 20 {
-                    notes.append("Broken or unreadable skill link: \(logical.path)")
-                }
+                skippedLinks += 1; brokenSkillLinks += 1
             }
             return
         }
@@ -399,7 +399,8 @@ private func item(url: URL, resolved: String?, info: stat, provider: AIContextPr
     return AIContextItem(id: path, path: path, resolvedPath: resolved, name: kind == .skill ? url.deletingLastPathComponent().lastPathComponent : url.lastPathComponent, scope: scope, kind: kind, provider: provider, source: source, logicalBytes: Int64(info.st_size), allocatedBytes: allocated, modified: contextDate(info), applicability: origin)
 }
 
-private func rank(items: [AIContextItem], roots: Set<String>, home: URL, deduplicateSkills: Bool = true) -> [AIContextFolderRanking] {
+private func rank(items: [AIContextItem], roots: Set<String>, home: URL, deduplicateSkills: Bool = true, allows: @escaping (URL) -> Bool = { _ in true }) -> [AIContextFolderRanking] {
+    let imports = InstructionImportCache(home: home, allows: allows)
     let candidateRoots = roots.isEmpty ? Set(items.filter { $0.scope == .project }.map { URL(fileURLWithPath: $0.path).deletingLastPathComponent().path }) : roots
     return candidateRoots.flatMap { path -> [AIContextFolderRanking] in
         let effectivePath = canonicalPath(path)
@@ -437,13 +438,29 @@ private func rank(items: [AIContextItem], roots: Set<String>, home: URL, dedupli
                     contribution.item.path.lowercased().hasSuffix("/agents.md") && overrideParents.contains(URL(fileURLWithPath: contribution.item.path).deletingLastPathComponent().path)
                 }
             }
-            let instructions = relevant.filter {
+            var instructions = relevant.filter {
                 $0.item.kind == .instruction && [.global, .inherited, .local].contains($0.origin)
+            }
+            // Claude expands @imports into the importing file's context, so imported files
+            // (including an AGENTS.md) count toward Claude's estimate with the importer's origin.
+            if provider == .claude {
+                var counted = Set(instructions.map { canonicalPath($0.item.resolvedPath ?? $0.item.path) })
+                for contribution in instructions {
+                    for imported in imports.closure(contribution.item.path) where counted.insert(canonicalPath(imported.path)).inserted {
+                        let item = AIContextItem(id: imported.path, path: imported.path, name: URL(fileURLWithPath: imported.path).lastPathComponent,
+                            scope: contribution.item.scope, kind: .instruction, provider: .claude,
+                            source: InstructionImports.sourcePrefix + URL(fileURLWithPath: imported.importer).lastPathComponent,
+                            logicalBytes: imported.bytes, allocatedBytes: imported.bytes, modified: imported.modified,
+                            applicability: contribution.item.applicability)
+                        let added = AIContextContribution(item: item, origin: contribution.origin)
+                        instructions.append(added); relevant.append(added)
+                    }
+                }
             }
             let sum = { (origin: AIContextOrigin) in instructions.filter { $0.origin == origin }.reduce(Int64(0)) { $0 + $1.item.logicalBytes } }
             let availableSkills = relevant.filter { $0.item.kind == .skill && $0.origin != .installedOnly }
             return AIContextFolderRanking(id: provider.rawValue + ":" + path, path: path, provider: provider,
-                instructionBytes: instructions.reduce(0) { $0 + $1.item.logicalBytes }, globalBytes: sum(.global), inheritedBytes: sum(.inherited), localBytes: sum(.local), skillCount: availableSkills.count, skillBytes: availableSkills.reduce(0) { $0 + $1.item.logicalBytes }, conditionalCount: relevant.filter { $0.origin == .conditional }.count, installedOnlyCount: relevant.filter { $0.origin == .installedOnly }.count, sources: relevant, notes: provider == .codex ? ["Potential ancestor scope; 32 KiB default project cap is not an exact loaded-byte measurement."] : provider == .claude ? ["CLAUDE.local.md and skill activation are conditional."] : ["Availability and activation are conditional or unknown."])
+                instructionBytes: instructions.reduce(0) { $0 + $1.item.logicalBytes }, globalBytes: sum(.global), inheritedBytes: sum(.inherited), localBytes: sum(.local), skillCount: availableSkills.count, skillBytes: availableSkills.reduce(0) { $0 + $1.item.logicalBytes }, conditionalCount: relevant.filter { $0.origin == .conditional }.count, installedOnlyCount: relevant.filter { $0.origin == .installedOnly }.count, sources: relevant, notes: provider == .codex ? ["Potential ancestor scope; 32 KiB default project cap is not an exact loaded-byte measurement."] : provider == .claude ? ["CLAUDE.local.md and skill activation are conditional. @imported files are counted up to 5 hops."] : ["Availability and activation are conditional or unknown."])
         }
     }.sorted { ($0.instructionBytes, $0.path, $0.provider.rawValue) > ($1.instructionBytes, $1.path, $1.provider.rawValue) }
 }

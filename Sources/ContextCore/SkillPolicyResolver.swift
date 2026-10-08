@@ -266,7 +266,7 @@ public enum SkillPolicyResolver {
         )
     }
 
-    private static func readMetadata(text: String) -> Frontmatter {
+    static func readMetadata(text: String) -> Frontmatter {
         let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
         guard lines.first?.trimmingCharacters(in: .whitespacesAndNewlines) == "---" else {
             return Frontmatter()
@@ -355,7 +355,7 @@ public enum SkillPolicyResolver {
     }
 }
 
-private struct Frontmatter {
+struct Frontmatter {
     var name: String?
     var description: String?
     var disableModelInvocation: Bool?

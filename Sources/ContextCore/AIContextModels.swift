@@ -139,6 +139,8 @@ public struct AIContextCoverage: Sendable, Equatable {
     public var skillDepthReached = false
     public var pluginEntryLimitReached = false
     public var pluginItemLimitReached = false
+    /// Skill links whose targets are missing or unreadable. Counted without a cap.
+    public var brokenSkillLinks = 0
 
     public var isPartial: Bool {
         itemLimitReached || entryLimitReached || unreadableCount > 0 || skippedLinks > 0 ||

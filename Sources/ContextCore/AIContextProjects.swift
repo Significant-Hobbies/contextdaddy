@@ -46,6 +46,14 @@ public enum AIContextProjectCatalog {
         let ownedInventory = Dictionary(grouping: report.items.filter { $0.scope == .project && $0.applicability != .installedOnly }) {
             projectOwner(for: $0, locationPath: storageLocation(for: $0))
         }
+        // A file reached through a Claude @import is also visible to Claude, even when
+        // inventory attributes the file itself to another agent (for example AGENTS.md).
+        var importingProviders: [String: Set<AIContextProvider>] = [:]
+        for ranking in report.folderRankings {
+            for contribution in ranking.sources where contribution.item.source.hasPrefix(InstructionImports.sourcePrefix) {
+                importingProviders[contribution.item.path, default: []].insert(ranking.provider)
+            }
+        }
         return paths.map { projectPath in
             let rankings = report.folderRankings.filter { $0.path == projectPath }
             var contributionsByPath: [String: AIContextContribution] = [:]
@@ -73,7 +81,7 @@ public enum AIContextProjectCatalog {
             }
             let locations = grouped.map { key, values in
                 let items = values.map(\.item).sorted(by: itemOrder)
-                let providers = sortedProviders(Set(items.map(\.provider)))
+                let providers = sortedProviders(Set(items.map(\.provider)).union(items.flatMap { importingProviders[$0.path] ?? [] }))
                 return AIContextProjectLocation(
                     id: key.scope.rawValue + ":" + key.path,
                     path: key.path,

@@ -338,7 +338,9 @@ final class ContextDaddyModel {
         let request = UUID()
         configurationGeneration = request
         let project = skillFolderContext.map { URL(fileURLWithPath: $0.path) }
-        let report = await Task.detached(priority: .utility) { AgentSetupAudit.audit(project: project) }.value
+        // Discovered project folders get instruction-import, skill and AGENTS.md visibility checks.
+        let discovered = projects.map { URL(fileURLWithPath: $0.path, isDirectory: true) }
+        let report = await Task.detached(priority: .utility) { AgentSetupAudit.audit(project: project, instructionProjects: discovered) }.value
         guard configurationGeneration == request else { return }
         configurationHealth = report
     }
