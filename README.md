@@ -7,7 +7,9 @@ ContextDaddy is a local-first macOS control plane for coding-agent context. It a
 
 The app combines a focused usage desk with a unified skill library and agent-policy inspector. Every value is labelled as measured, derived, estimated, partial, or unavailable. Missing instrumentation stays missing; ContextDaddy does not manufacture precision.
 
-The primary navigation is **Usage**, **Skills**, **Projects**, and **OpenTelemetry**. **Files & diagnostics** is a secondary, always-visible route to raw source inventory and configuration checks. Skills explains how each agent can use a skill; Projects shows discovered files rather than claiming they entered a live prompt. OpenTelemetry is directly reachable and uses a separate fixed 24-hour window.
+The primary navigation is **Usage**, **Skills**, **Memory**, **Projects**, and **Run telemetry**. **Files & diagnostics** is a secondary route to raw source inventory and configuration checks. Skills explains how each agent can use a skill; Projects shows discovered files rather than claiming they entered a live prompt. Run telemetry combines recorded runs with verified local signals and a separate fixed 24-hour telemetry window.
+
+Agent Inbox owns live thread status, the agent-status battery, attention, conversations and replies. PerformanceDaddy owns measured Mac and workload diagnosis. ContextDaddy owns context, invocation policy and consumption evidence; discovery and telemetry do not prove live prompt use or task success.
 
 ## Current milestone
 

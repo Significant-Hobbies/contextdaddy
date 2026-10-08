@@ -14,7 +14,7 @@ struct TelemetryView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: compact ? 13 : 19) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Agent activity").font(.title.bold())
+                        Text("Run telemetry").font(.title.bold())
                         Text("See what ran, where tokens went, and what to review next.")
                             .foregroundStyle(DaddyTheme.muted)
                     }
