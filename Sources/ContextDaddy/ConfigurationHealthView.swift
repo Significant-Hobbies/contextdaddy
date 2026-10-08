@@ -24,7 +24,7 @@ struct ConfigurationHealthView: View {
                     }
                 }
 
-                Text("Checks local configuration structure and declared MCP launchers. Credentials, remote connectivity, managed settings, imported configurations and launch-time overrides are not tested.")
+                Text("Checks local configuration structure, declared MCP launchers, Claude @imports, skill descriptions and links, and memory file sizes. Credentials, remote connectivity, managed settings and launch-time overrides are not tested.")
                     .font(.caption).foregroundStyle(DaddyTheme.muted)
                 if model.configurationIssueBaseline != nil {
                     HStack(spacing: 12) {
@@ -72,7 +72,7 @@ struct ConfigurationHealthView: View {
                                 .foregroundStyle(file.status == .unverified ? DaddyTheme.amber : DaddyTheme.muted)
                         }
                     }
-                    Label("Checks user files and files directly inside the selected folder. Inherited, custom-home, managed and imported settings may add other sources. Missing optional files are not errors.", systemImage: "info.circle")
+                    Label("Checks user files, the selected folder and discovered project folders. Inherited, custom-home and managed settings may add other sources. Missing optional files are not errors.", systemImage: "info.circle")
                     Label("Read-only check: credential, header, environment, and MCP argument values are ignored.", systemImage: "lock.shield")
                 }
                 .font(.caption2).foregroundStyle(DaddyTheme.muted)

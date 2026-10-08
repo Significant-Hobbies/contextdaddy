@@ -160,6 +160,21 @@ public enum AgentConfigurationAuditor {
                 ))
             }
 
+            if runtime == .codex, table.isEmpty, key == "model_reasoning_effort",
+               ["low", "minimal"].contains(unquote(rawValue).lowercased()),
+               url.standardizedFileURL.path == configuration.home.appendingPathComponent(".codex/config.toml").standardizedFileURL.path {
+                issues.append(ConfigurationHealthIssue(
+                    id: "codex-low-reasoning-default-\(url.path)",
+                    severity: .warning,
+                    runtime: .codex,
+                    title: "Low global reasoning effort",
+                    detail: "`model_reasoning_effort = \"\(unquote(rawValue))\"` is the global default, so every Codex session without an override starts with reduced reasoning.",
+                    path: url.path,
+                    line: lineNumber,
+                    remediation: "Remove the line to use the model default, or set the lower effort in a named profile used only for quick tasks."
+                ))
+            }
+
             guard let serverName = directMCPServerName(from: table) else { continue }
             var server = servers[serverName] ?? MCPServer(name: serverName)
             switch key {

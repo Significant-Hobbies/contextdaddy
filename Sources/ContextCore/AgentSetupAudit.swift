@@ -33,7 +33,8 @@ public enum AgentSetupAudit {
     public static func audit(home: URL = FileManager.default.homeDirectoryForCurrentUser,
                              project: URL? = nil, targets override: [Target]? = nil,
                              executableSearchPaths: [String]? = nil,
-                             maximumBytes: Int = 512 * 1_024) -> ConfigurationHealthReport {
+                             maximumBytes: Int = 512 * 1_024,
+                             instructionProjects: [URL] = []) -> ConfigurationHealthReport {
         let configuration = AgentConfigurationAuditor.Configuration(home: home, executableSearchPaths: executableSearchPaths)
         var files: [ConfigurationFileCheck] = []
         var issues: [ConfigurationHealthIssue] = []
@@ -66,7 +67,7 @@ public enum AgentSetupAudit {
             }
             if url.pathExtension == "toml" {
                 issues += AgentConfigurationAuditor.auditCodexConfig(body, url: url, configuration: configuration, runtime: runtime)
-                record(.checked, "MCP executable references" + (runtime == .codex ? " and supported misplaced settings" : "") + ". Full TOML schema and runtime connectivity are not validated.")
+                record(.checked, "MCP executable references" + (runtime == .codex ? ", supported misplaced settings and the default reasoning effort" : "") + ". Full TOML schema and runtime connectivity are not validated.")
             } else {
                 let json = runtime == .devin ? stripJSONComments(body) : body
                 guard let object = try? JSONSerialization.jsonObject(with: Data(json.utf8)) as? [String: Any] else {
@@ -100,6 +101,11 @@ public enum AgentSetupAudit {
                 record(.checked, "JSON object and declared MCP executable references. No connections or commands executed.")
             }
         }
+        // Instruction imports, skill metadata, skill links and memory sizes for user files,
+        // the selected folder and any discovered project folders supplied by the caller.
+        let hygiene = InstructionHygieneAudit.audit(home: home, projects: (project.map { [$0] } ?? []) + instructionProjects)
+        issues += hygiene.issues
+        files += hygiene.files
         return .init(issues: issues, scannedFiles: files.filter { $0.status == .checked }.map(\.path), files: files)
     }
 
