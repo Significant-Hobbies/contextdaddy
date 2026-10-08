@@ -43,7 +43,7 @@ ContextDaddy should feel unmistakably related to StorageDaddy while solving a di
 - Pure black canvas with thin mint-outlined surfaces and minimal elevation, matching the StorageDaddy shell.
 - Mint means measured/healthy; blue means derived; amber means partial/estimated; coral means failure or disabled.
 - Rounded display typography, compact monospaced paths, and the same button geometry and secondary-text tint as StorageDaddy.
-- A two-column native shell with four task destinations: Usage, Skills, Projects, OpenTelemetry. A secondary Files & diagnostics control opens raw Inventory and Diagnostics without making them peer destinations. Page headings carry the fuller explanation.
+- A two-column native shell with five task destinations: Usage, Skills, Memory, Projects, Run telemetry. A secondary Files & diagnostics control opens raw Inventory and Diagnostics without making them peer destinations. Page headings carry the fuller explanation. Historical activity/telemetry naming below records earlier decisions.
 - Evidence badges accompany values rather than relying on color alone.
 - The inherited Daddy doodle sheet is functional art: the context-cart hero explains the product, section scenes reinforce location, and the agent scene becomes the in-app family mark.
 

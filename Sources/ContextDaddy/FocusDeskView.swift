@@ -42,7 +42,7 @@ struct FocusDeskView: View {
                     ScreenHeader(
                         eyebrow: "Account limits and local history",
                         title: "Usage",
-                        subtitle: "Codex and Claude allowances, plus unified local history across agents. Live activity is in Agent activity.",
+                        subtitle: "Codex and Claude allowances, plus unified local history across agents. Recorded runs and live signals are in Run telemetry.",
                         art: .telemetry,
                         hero: !compact,
                         compact: compact

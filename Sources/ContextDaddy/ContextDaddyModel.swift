@@ -13,7 +13,7 @@ enum AppSection: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .overview: "Usage"
-        case .telemetry: "Agent activity"
+        case .telemetry: "Run telemetry"
         case .skills, .memory, .projects: rawValue
         }
     }

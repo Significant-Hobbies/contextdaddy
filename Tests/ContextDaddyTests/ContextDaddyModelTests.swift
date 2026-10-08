@@ -11,7 +11,7 @@ struct ContextDaddyModelTests {
         #expect(model.visibleSkills.isEmpty)
         #expect(AppSection.allCases == [.overview, .skills, .memory, .projects, .telemetry])
         #expect(AppSection.overview.label == "Usage")
-        #expect(AppSection.telemetry.label == "Agent activity")
+        #expect(AppSection.telemetry.label == "Run telemetry")
         #expect(SkillsMode.ledger.rawValue == "Agent policies")
         #expect(!model.evidenceOpen)
         #expect(model.skillsMode == .library)

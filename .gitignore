@@ -21,3 +21,8 @@ Assets/*-master*
 Assets/*-before-*
 Assets/*-preview*
 Assets/*.iconset/
+
+# Local tool state
+.wrangler/
+.impeccable/
+.xcodebuildmcp/
