@@ -3,6 +3,58 @@ import Testing
 @testable import ContextCore
 
 struct ProviderQuotaClientTests {
+    @Test func codexProjectsCreditUnitsWithoutMixingResetGrantsOrSpark() throws {
+        let response: [String: Any] = ["result": [
+            "rateLimitsByLimitId": [
+                "codex": ["primary": ["usedPercent": 30.0],
+                          "credits": ["balance": "12345.6789000", "hasCredits": true, "unlimited": false]],
+                "spark": ["credits": ["balance": "999999", "hasCredits": true, "unlimited": true]],
+            ],
+            "rateLimitResetCredits": ["availableCount": 2],
+        ]]
+        let status = try ProviderQuotaParser.codex(response)
+        #expect(status.credits?.balance == Decimal(string: "12345.6789000"))
+        #expect(status.credits?.hasCredits == true)
+        #expect(status.credits?.unlimited == false)
+        #expect(status.credits?.limitAmount == nil)
+        #expect(status.credits?.remainingPercent == nil)
+        #expect(status.resetCredits == 2)
+    }
+
+    @Test func codexAcceptsCreditOnlyAndLegacySingleBucketReadings() throws {
+        let creditOnly = try ProviderQuotaParser.codex(["result": ["rateLimits": [
+            "credits": ["hasCredits": true, "unlimited": true, "balance": NSNull()],
+        ]]])
+        #expect(creditOnly.windows.isEmpty)
+        #expect(creditOnly.credits?.unlimited == true)
+        #expect(creditOnly.credits?.balance == nil)
+
+        let depleted = try ProviderQuotaParser.codex(["result": ["rateLimits": [
+            "primary": ["usedPercent": 100.0],
+            "credits": ["hasCredits": false, "unlimited": false, "balance": "0"],
+        ]]])
+        #expect(depleted.credits?.balance == 0)
+        #expect(depleted.credits?.hasCredits == false)
+        #expect(depleted.resetCredits == nil)
+    }
+
+    @Test func codexMissingAndMalformedBalancesStayUnknown() throws {
+        for value: Any in [NSNull(), [:] as [String: Any]] {
+            let status = try ProviderQuotaParser.codex(["result": ["rateLimits": [
+                "primary": ["usedPercent": 30.0], "credits": value,
+            ]]])
+            #expect(status.credits == nil)
+        }
+        for value: Any in [NSNull(), "NaN", "Infinity", "-1", "12 credits", "", "1,234", 123] {
+            let status = try ProviderQuotaParser.codex(["result": ["rateLimits": [
+                "primary": ["usedPercent": 30.0],
+                "credits": ["balance": value, "hasCredits": true, "unlimited": false],
+            ]]])
+            #expect(status.credits?.balance == nil)
+            #expect(status.credits?.hasCredits == true)
+        }
+    }
+
     @Test func codexUsesAccountBucketAndExcludesSparkAndIdentity() throws {
         let response: [String: Any] = [
             "id": 1,

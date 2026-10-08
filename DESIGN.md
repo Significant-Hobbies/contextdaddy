@@ -1,5 +1,21 @@
 # ContextDaddy design contract
 
+Platform: native-macos
+Supported minimum width: 960
+
+Codex credit evidence reviews the native Provider allowance panel in AppKit-hosted
+SwiftUI windows at 960, 1180 and 1440 logical points, captured at the display's
+2x backing scale. Credit balance uses the existing secondary-text treatment and
+stays separate from reset grants, dollar amounts and local history.
+
+The allowance grouping pass uses direction A with the owner's constraint to make
+few changes from the current design. The two existing provider cards keep their
+headings, percentage meters and controls. Labelled credit and reset-grant groups
+sit below the meters; source/check details use native disclosure. Claude grant
+counts stay distinct from scheduled resets, with an explicit unreported state
+and a link to Claude Usage when the CLI supplies no count. Native full-window
+evidence covers 960, 1180 and 1440 points, including missing and stale readings.
+
 ## Selected direction
 
 Owner-directed StorageDaddy family fork: keep the A+C information architecture (live operations plus a policy ledger), but express it through StorageDaddy's warm black-and-mint visual language, rounded typography, fine outlines, and editorial Daddy doodles.
@@ -17,7 +33,7 @@ ContextDaddy should feel unmistakably related to StorageDaddy while solving a di
 - Pure black canvas with thin mint-outlined surfaces and minimal elevation, matching the StorageDaddy shell.
 - Mint means measured/healthy; blue means derived; amber means partial/estimated; coral means failure or disabled.
 - Rounded display typography, compact monospaced paths, and the same button geometry and secondary-text tint as StorageDaddy.
-- A two-column native shell with four task destinations: Usage, Skills, Projects, OpenTelemetry. A secondary Files & diagnostics control opens raw Inventory and Diagnostics without making them peer destinations. Page headings carry the fuller explanation.
+- A two-column native shell with five task destinations: Usage, Skills, Memory, Projects, Run telemetry. A secondary Files & diagnostics control opens raw Inventory and Diagnostics without making them peer destinations. Page headings carry the fuller explanation. Historical Agent activity naming below refers to consumption/run evidence, not the live Agent Inbox.
 - Evidence badges accompany values rather than relying on color alone.
 - The inherited Daddy doodle sheet is functional art: the context-cart hero explains the product, section scenes reinforce location, and the agent scene becomes the in-app family mark.
 

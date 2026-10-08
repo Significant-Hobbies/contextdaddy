@@ -215,7 +215,8 @@ enum ProviderQuotaParser {
                                                    resetDescription: nil))
             }
         }
-        guard !windows.isEmpty else { throw ProviderQuotaError.requestFailed("Codex") }
+        let credits = selected.first(where: { $0.0 == "codex" }).flatMap { codexCredits($0.1["credits"]) }
+        guard !windows.isEmpty || credits != nil else { throw ProviderQuotaError.requestFailed("Codex") }
         windows.sort { ($0.windowDurationMinutes ?? .max, $0.label) < ($1.windowDurationMinutes ?? .max, $1.label) }
         let resetSummary = result["rateLimitResetCredits"] as? [String: Any]
         let reset = resetSummary?["availableCount"] as? NSNumber
@@ -225,10 +226,24 @@ enum ProviderQuotaParser {
         let noExpiryCount = availableDetails?.filter { $0["expiresAt"] is NSNull }.count
         return ProviderQuotaStatus(provider: "codex", status: "ready", source: "codex app-server account/rateLimits/read",
                                    checkedAt: timestamp(), plan: plan, windows: windows,
-                                   credits: nil, resetCredits: reset?.uint64Value,
+                                   credits: credits, resetCredits: reset?.uint64Value,
                                    latestReportedResetCreditExpiryUnix: expiries?.max(),
                                    resetCreditDetailsCount: availableDetails.map { UInt64($0.count) },
                                    resetCreditsWithoutExpiryCount: noExpiryCount.map(UInt64.init), message: nil)
+    }
+
+    private static func codexCredits(_ value: Any?) -> ProviderCreditBalance? {
+        guard let snapshot = value as? [String: Any] else { return nil }
+        var balance: Decimal?
+        if let raw = snapshot["balance"] as? String,
+           raw.range(of: #"^[0-9]+(?:\.[0-9]+)?$"#, options: .regularExpression) != nil,
+           let amount = Decimal(string: raw, locale: Locale(identifier: "en_US_POSIX")), !amount.isNaN {
+            balance = amount
+        }
+        let hasCredits = snapshot["hasCredits"] as? Bool
+        let unlimited = snapshot["unlimited"] as? Bool
+        guard balance != nil || hasCredits != nil || unlimited != nil else { return nil }
+        return ProviderCreditBalance(balance: balance, hasCredits: hasCredits, unlimited: unlimited)
     }
 
     static func claude(_ output: String) throws -> ProviderQuotaStatus {

@@ -27,6 +27,19 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def validate_release_source(root, expected_sha, binary):
+    actual = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    if actual != expected_sha:
+        raise ValueError("--source-sha does not match the checked-out source")
+    status = subprocess.check_output(
+        ["git", "status", "--porcelain", "--untracked-files=all"], cwd=root, text=True)
+    if status.strip():
+        raise ValueError("Release source must be clean; retain local changes and qualify a committed checkout")
+    sources = list((root / "Sources").rglob("*")) + [root / "Package.swift", root / "Package.resolved"]
+    if any(path.is_file() and path.stat().st_mtime_ns > binary.stat().st_mtime_ns for path in sources):
+        raise ValueError("Source changed after the binary; rebuild before packaging")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--identity", required=True, help="Installed Developer ID Application identity")
@@ -42,9 +55,6 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch(r"[0-9a-f]{40}", args.source_sha):
         parser.error("--source-sha must be a full commit hash")
-    source_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-    if source_sha != args.source_sha:
-        parser.error("--source-sha does not match the checked-out source")
     api_auth = [args.notary_api_key, args.notary_key_id, args.notary_issuer_id]
     if (args.notary_profile and any(api_auth)) or (any(api_auth) and not all(api_auth)) or not (args.notary_profile or all(api_auth)):
         parser.error("Pass a Keychain profile or the complete API key, key ID, and issuer ID")
@@ -52,6 +62,10 @@ def main():
     binary = ROOT / ".build/release/ContextDaddy"
     if not binary.is_file():
         parser.error("Build the release executable first with swift build -c release")
+    try:
+        validate_release_source(ROOT, args.source_sha, binary)
+    except ValueError as error:
+        parser.error(str(error))
     if args.output.exists():
         parser.error(f"Output already exists: {args.output}")
     if not args.ccusage.is_file():

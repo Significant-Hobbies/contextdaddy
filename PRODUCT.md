@@ -8,10 +8,28 @@ ContextDaddy helps developers who use multiple coding agents understand and gove
 
 The primary user is a developer running Codex, Claude, Cursor, Devin, or Grok on a Mac. They need to diagnose a live agent's consumption and audit skill invocation policy without manually tracing symlinks, frontmatter, runtime-specific config, and telemetry dashboards.
 
+## Ownership across the three apps
+
+ContextDaddy owns skills, plugins, MCP structural health, instructions, memory,
+context scope, persistent skill invocation/access policy, token history, provider
+allowance and provenance-aware run telemetry. The telemetry page is named
+**Run telemetry** to distinguish consumption evidence from live inbox status.
+The historical “Agent activity” sections below record earlier naming decisions.
+
+Agent Inbox owns live threads, working/waiting/unknown states, the segmented
+agent-status battery, attention notifications, exact conversation linking,
+acknowledged replies and individual permission decisions. Inbox execution modes
+govern its own explicitly started runs; they do not edit global skill/MCP policy.
+ContextDaddy does not resume conversations or answer permission prompts.
+
+PerformanceDaddy owns measured Mac/workload diagnosis, process attribution,
+device battery/power, captures and comparable performance follow-ups. Consumption
+telemetry does not prove a runtime bottleneck, successful task or need for a reply.
+
 ## Product promises
 
 - One physical skill is one ledger record, even when it has many logical exposures.
-- The primary navigation follows user decisions: Usage, Skills, and OpenTelemetry. Project files and instructions remain a secondary inspector; working-folder selection lives directly in Skills. Raw source files and configuration diagnostics remain available as secondary Files & diagnostics, not competing representations of skills.
+- The primary navigation follows user decisions: Usage, Skills, Memory, Projects and Run telemetry. Working-folder selection lives directly in Skills. Raw source files and configuration diagnostics remain available as secondary Files & diagnostics, not competing representations of skills.
 - Policy is runtime-specific and explains whether it is explicit or derived.
 - Non-auto skills show how to invoke them.
 - One selected-agent skill-access view makes automatic, manual-only, model-only, disabled, undiscoverable, and review-needed policy directly filterable.

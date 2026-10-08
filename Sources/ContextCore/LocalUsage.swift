@@ -346,10 +346,26 @@ public struct ProviderCreditBalance: Decodable, Sendable {
     public let remainingPercent: Double?
     public let usedAmount: Double?
     public let limitAmount: Double?
+    /// Codex reports a credit-unit balance, not a dollar amount or reset count.
+    public let balance: Decimal?
+    public let hasCredits: Bool?
+    public let unlimited: Bool?
+
+    public init(remainingPercent: Double? = nil, usedAmount: Double? = nil, limitAmount: Double? = nil,
+                balance: Decimal? = nil, hasCredits: Bool? = nil, unlimited: Bool? = nil) {
+        self.remainingPercent = remainingPercent
+        self.usedAmount = usedAmount
+        self.limitAmount = limitAmount
+        self.balance = balance
+        self.hasCredits = hasCredits
+        self.unlimited = unlimited
+    }
 
     enum CodingKeys: String, CodingKey {
         case remainingPercent = "remaining_percent"
         case usedAmount = "used_amount", limitAmount = "limit_amount"
+        case balance, unlimited
+        case hasCredits = "has_credits"
     }
 }
 
