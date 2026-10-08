@@ -147,6 +147,7 @@ final class ContextDaddyModel {
     @ObservationIgnored private var usageGeneration = UUID()
     @ObservationIgnored private let discover: @Sendable ([URL]) throws -> AIContextDiscoveryReport
     private let snapshotStore = TelemetrySnapshotStore()
+    private let skillActivityStore = SkillActivitySnapshotStore()
 
     init(discover: @escaping @Sendable ([URL]) throws -> AIContextDiscoveryReport = { roots in
         try AIContextDiscovery.discover(configuration: .init(additionalRoots: roots, additionalSkillRoots:
@@ -340,7 +341,16 @@ final class ContextDaddyModel {
         let project = skillFolderContext.map { URL(fileURLWithPath: $0.path) }
         // Discovered project folders get instruction-import, skill and AGENTS.md visibility checks.
         let discovered = projects.map { URL(fileURLWithPath: $0.path, isDirectory: true) }
-        let report = await Task.detached(priority: .utility) { AgentSetupAudit.audit(project: project, instructionProjects: discovered) }.value
+        let records = catalog?.records ?? []
+        let activity = skillActivity
+        let report = await Task.detached(priority: .utility) {
+            let setup = AgentSetupAudit.audit(project: project, instructionProjects: discovered)
+            // Measured zero-invocation findings join setup issues so Copy all and Verify include them.
+            guard let activity else { return setup }
+            let usage = SkillActivityFindings.zeroInvocations(records: records, snapshot: activity)
+            return ConfigurationHealthReport(issues: setup.issues + usage.issues, scannedFiles: setup.scannedFiles + usage.files.map(\.path),
+                                             generatedAt: setup.generatedAt, files: setup.files + usage.files)
+        }.value
         guard configurationGeneration == request else { return }
         configurationHealth = report
     }
@@ -379,6 +389,7 @@ final class ContextDaddyModel {
         defer {
             if refreshGeneration == request { isLoading = false; isContextRefreshRunning = false }
         }
+        if skillActivity == nil, let saved = await skillActivityStore.load() { skillActivity = saved }
         let roots = extraRoots.map { URL(fileURLWithPath: $0, isDirectory: true) }
         let discover = self.discover
         async let loadedContext = Task.detached(priority: .userInitiated) {
@@ -471,6 +482,8 @@ final class ContextDaddyModel {
         let snapshot = await Task.detached(priority: .utility) { SkillActivityHistory().scan() }.value
         skillActivity = snapshot
         isSkillActivityLoading = false
+        try? await skillActivityStore.save(snapshot)
+        await refreshConfigurationHealth()
     }
 
     func refreshQuota() async {

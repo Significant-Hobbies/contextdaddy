@@ -1,13 +1,17 @@
 import Darwin
 import Foundation
 
-public enum SkillActivityEvidence: String, Sendable {
+public enum SkillActivityEvidence: String, Codable, Sendable {
     case toolCall = "Skill tool call"
     case fileRead = "Skill file read"
     case pathReference = "Skill path in a tool call"
+    /// A user-typed Claude `/name` command. The only route for manual-only skills.
+    case slashCommand = "Slash command"
+    /// A user-typed Codex `$name` mention in a user message (injected catalogs excluded).
+    case explicitMention = "Explicit $skill mention"
 }
 
-public struct SkillActivityObservation: Sendable {
+public struct SkillActivityObservation: Codable, Sendable {
     public let name: String
     public let runtime: AgentRuntime
     public let evidence: SkillActivityEvidence
@@ -18,22 +22,32 @@ public struct SkillActivityObservation: Sendable {
     public let failed: Bool
 }
 
-public struct SkillActivityCoverage: Sendable {
+public struct SkillActivityCoverage: Codable, Sendable {
     public let runtime: AgentRuntime
     public let files: Int
     public let partial: Bool
     public let note: String
     public let skippedRecords: Int
     public let unreadableFiles: Int
+    /// Earliest and latest modification day (yyyy-MM-dd) of the scanned session files.
+    public let firstDay: String?
+    public let lastDay: String?
 
     public init(runtime: AgentRuntime, files: Int, partial: Bool, note: String,
-                skippedRecords: Int = 0, unreadableFiles: Int = 0) {
+                skippedRecords: Int = 0, unreadableFiles: Int = 0, firstDay: String? = nil, lastDay: String? = nil) {
         self.runtime = runtime
         self.files = files
         self.partial = partial
         self.note = note
         self.skippedRecords = skippedRecords
         self.unreadableFiles = unreadableFiles
+        self.firstDay = firstDay
+        self.lastDay = lastDay
+    }
+
+    public var dayRange: String? {
+        guard let firstDay, let lastDay else { return nil }
+        return firstDay == lastDay ? firstDay : "\(firstDay) to \(lastDay)"
     }
 }
 
@@ -44,14 +58,22 @@ public struct SkillActivitySummary: Sendable {
     public var failedToolCalls: Int { observations.filter { $0.evidence == .toolCall && $0.failed }.count }
     public var fileReadSessions: Int { Set(observations.filter { $0.evidence == .fileRead }.map { "\($0.runtime.rawValue):\($0.session)" }).count }
     public var pathReferenceSessions: Int { Set(observations.filter { $0.evidence == .pathReference }.map { "\($0.runtime.rawValue):\($0.session)" }).count }
+    /// User-typed invocations: Claude slash commands and Codex `$name` mentions.
+    public var explicitInvocations: Int { observations.filter { $0.evidence == .slashCommand || $0.evidence == .explicitMention }.count }
     public var lastSeen: String? { observations.map(\.day).filter { !$0.isEmpty }.max() }
     public var isEmpty: Bool { observations.isEmpty }
 }
 
-public struct SkillActivitySnapshot: Sendable {
+public struct SkillActivitySnapshot: Codable, Sendable {
     public let observations: [SkillActivityObservation]
     public let coverage: [SkillActivityCoverage]
     public let scannedAt: Date
+
+    public init(observations: [SkillActivityObservation], coverage: [SkillActivityCoverage], scannedAt: Date) {
+        self.observations = observations
+        self.coverage = coverage
+        self.scannedAt = scannedAt
+    }
 
     public func summary(for skill: SkillRecord, runtime: AgentRuntime? = nil, folder: String? = nil,
                         sinceDay: String? = nil) -> SkillActivitySummary {
@@ -152,12 +174,14 @@ private struct Reader {
             return
         }
         guard (try? root.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) != true,
-              let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey],
+              let enumerator = manager.enumerator(at: root, includingPropertiesForKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey],
                                                   options: [.skipsPackageDescendants]) else {
             coverage.append(.init(runtime: runtime, files: 0, partial: true, note: "History folder is linked or unreadable"))
             return
         }
         var files = 0
+        var firstModified: Date?
+        var lastModified: Date?
         var partial = false
         var skippedRecords = 0
         var unreadableFiles = 0
@@ -166,7 +190,7 @@ private struct Reader {
             if Task.isCancelled || Date() >= deadline || totalFiles >= limits.maximumFiles || totalBytes >= limits.maximumBytes {
                 partial = true; limitReached = true; break
             }
-            guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey]) else {
+            guard let values = try? url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey, .contentModificationDateKey]) else {
                 partial = true; unreadableFiles += 1; continue
             }
             if values.isSymbolicLink == true { enumerator.skipDescendants(); continue }
@@ -175,6 +199,10 @@ private struct Reader {
             let size = Int64(values.fileSize ?? 0)
             guard size >= 0, size <= limits.maximumBytes - totalBytes else { partial = true; limitReached = true; break }
             totalFiles += 1; totalBytes += size; files += 1
+            if let modified = values.contentModificationDate {
+                firstModified = min(firstModified ?? modified, modified)
+                lastModified = max(lastModified ?? modified, modified)
+            }
             do {
                 if runtime == .devin { try scanDevinFile(url) }
                 else {
@@ -190,7 +218,8 @@ private struct Reader {
         if limitReached { reasons.append("scan limit reached") }
         coverage.append(.init(runtime: runtime, files: files, partial: partial,
                               note: partial ? reasons.joined(separator: ", ") : files == 0 ? "No matching local session files" : "Local session files scanned",
-                              skippedRecords: skippedRecords, unreadableFiles: unreadableFiles))
+                              skippedRecords: skippedRecords, unreadableFiles: unreadableFiles,
+                              firstDay: firstModified.map(localDay), lastDay: lastModified.map(localDay)))
     }
 
     private func accepts(_ url: URL, runtime: AgentRuntime) -> Bool {
@@ -212,9 +241,11 @@ private struct Reader {
         var codexProject: String?
         var codexHeaderLines = 0
         var skippedLines = 0
+        var lineNumber = 0
         while Date() < deadline && !Task.isCancelled {
             let count = getline(&pointer, &capacity, file)
             if count < 0 { break }
+            lineNumber += 1
             if count > limits.maximumLineBytes { skippedLines += 1; continue }
             guard let pointer else { continue }
             let line = Data(bytesNoCopy: pointer, count: count, deallocator: .none)
@@ -227,8 +258,12 @@ private struct Reader {
                     }
                 }
                 if line.range(of: Data("SKILL.md".utf8)) != nil { scanCodex(line, url: url, project: codexProject) }
+                if line.range(of: Data("$".utf8)) != nil, line.range(of: Data("\"user\"".utf8)) != nil {
+                    scanCodexMentions(line, url: url, project: codexProject, lineNumber: lineNumber)
+                }
             case .claude:
-                if line.range(of: Data("\"Skill\"".utf8)) != nil || line.range(of: Data("tool_use_id".utf8)) != nil {
+                if line.range(of: Data("\"Skill\"".utf8)) != nil || line.range(of: Data("tool_use_id".utf8)) != nil
+                    || line.range(of: Data("<command-name>".utf8)) != nil {
                     scanClaude(line, url: url)
                 }
             case .cursor, .grok:
@@ -256,9 +291,64 @@ private struct Reader {
         }
     }
 
+    private mutating func scanCodexMentions(_ line: Data, url: URL, project: String?, lineNumber: Int) {
+        guard let row = object(line), string(row["type"]) == "response_item", let payload = dict(row["payload"]),
+              string(payload["type"]) == "message", string(payload["role"]) == "user",
+              let blocks = payload["content"] as? [Any] else { return }
+        for case let block as [String: Any] in blocks {
+            guard let text = string(block["text"]), !Self.isInjectedCodexContext(text) else { continue }
+            for name in Self.dollarMentions(in: text) {
+                record(.init(name: name, runtime: .codex, evidence: .explicitMention, session: url.path,
+                             day: day(row["timestamp"]), project: project, skillPath: nil, failed: false),
+                       key: "codex-mention:\(url.path):\(lineNumber):\(name)")
+            }
+        }
+    }
+
+    /// Codex injects the skill catalog, AGENTS.md and environment blocks as user-role text.
+    static func isInjectedCodexContext(_ text: String) -> Bool {
+        ["<skills_instructions>", "AGENTS.md instructions", "<environment_context>", "<user_instructions>",
+         "<permissions instructions>", "<INSTRUCTIONS>"].contains { text.contains($0) }
+    }
+
+    static func dollarMentions(in text: String) -> [String] {
+        let pattern = try! NSRegularExpression(pattern: #"(?<![\w$])\$([a-z][a-z0-9_-]{1,63}(?::[a-z][a-z0-9_-]{1,63})?)(?![\w-])"#)
+        let range = NSRange(text.startIndex..., in: text)
+        var names: [String] = []
+        for match in pattern.matches(in: text, range: range) {
+            guard let nameRange = Range(match.range(at: 1), in: text) else { continue }
+            let name = String(text[nameRange].split(separator: ":").last ?? "")
+            if !name.isEmpty, !names.contains(name) { names.append(name) }
+        }
+        return names
+    }
+
+    static func slashCommands(in text: String) -> [String] {
+        let pattern = try! NSRegularExpression(pattern: #"<command-name>/?([A-Za-z0-9][A-Za-z0-9:_.-]{0,120})</command-name>"#)
+        let range = NSRange(text.startIndex..., in: text)
+        return pattern.matches(in: text, range: range).compactMap { match in
+            guard let nameRange = Range(match.range(at: 1), in: text),
+                  let name = text[nameRange].split(separator: ":").last, !name.isEmpty else { return nil }
+            return String(name)
+        }
+    }
+
     private mutating func scanClaude(_ line: Data, url: URL) {
-        guard let row = object(line), let message = dict(row["message"]), let blocks = message["content"] as? [Any] else { return }
+        guard let row = object(line), let message = dict(row["message"]) else { return }
         let type = string(row["type"])
+        if type == "user" {
+            let texts = (message["content"] as? String).map { [$0] }
+                ?? ((message["content"] as? [Any]) ?? []).compactMap { dict($0).flatMap { string($0["type"]) == "text" ? string($0["text"]) : nil } }
+            let session = string(row["sessionId"]) ?? url.path
+            for (index, text) in texts.enumerated() where text.contains("<command-name>") {
+                for name in Self.slashCommands(in: text) {
+                    record(.init(name: name, runtime: .claude, evidence: .slashCommand, session: session,
+                                 day: day(row["timestamp"]), project: string(row["cwd"]), skillPath: nil, failed: false),
+                           key: "claude-command:\(session):\(string(row["uuid"]) ?? string(row["timestamp"]) ?? url.path):\(index):\(name)")
+                }
+            }
+        }
+        guard let blocks = message["content"] as? [Any] else { return }
         for value in blocks {
             guard let block = dict(value) else { continue }
             if type == "assistant", string(block["type"]) == "tool_use", string(block["name"]) == "Skill",
@@ -353,6 +443,13 @@ private struct Reader {
             return formatter.string(from: Date(timeIntervalSince1970: number.doubleValue))
         }
         return ""
+    }
+
+    private func localDay(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter.string(from: date)
     }
 
     private func fileDay(_ url: URL) -> String {

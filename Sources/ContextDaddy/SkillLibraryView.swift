@@ -539,14 +539,14 @@ struct SkillLibraryView: View {
                             ForEach(SkillActivityFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
                         }.fixedSize()
                     }.font(.caption)
-                    Text(snapshot.coverage.map { "\($0.runtime.rawValue): \($0.files) files\($0.partial ? " · partial (\($0.note))" : "")" }.joined(separator: "  ·  "))
+                    Text("Scanned \(snapshot.scannedAt.formatted(date: .abbreviated, time: .shortened)) · " + snapshot.coverage.filter { $0.files > 0 || $0.partial }.map { "\($0.runtime.rawValue): \($0.files) files\($0.dayRange.map { " (\($0))" } ?? "")\($0.partial ? " · partial (\($0.note))" : "")" }.joined(separator: "  ·  "))
                         .font(.caption2).foregroundStyle(DaddyTheme.muted).fixedSize(horizontal: false, vertical: true)
                     if activityFilter == .noEvidence {
                         Text("No recorded event does not mean unused. Agent logs differ, and this filter excludes folders without project attribution.")
                             .font(.caption).foregroundStyle(DaddyTheme.amber)
                     }
                 } else {
-                    Text("Scan existing agent sessions for skill tool calls and skill-file reads. This is local and read-only; prompts and responses are not retained.")
+                    Text("Scan existing agent sessions for skill tool calls, typed skill invocations and skill-file reads. This is local and read-only; prompts and responses are not retained.")
                         .font(.callout).foregroundStyle(DaddyTheme.muted).fixedSize(horizontal: false, vertical: true)
                 }
             }
@@ -775,6 +775,7 @@ struct SkillLibraryView: View {
         guard !summary.isEmpty else { return nil }
         var parts: [String] = []
         if summary.toolCalls > 0 { parts.append("\(summary.toolCalls) skill calls") }
+        if summary.explicitInvocations > 0 { parts.append("\(summary.explicitInvocations) typed invocations") }
         if summary.fileReadSessions > 0 { parts.append("\(summary.fileReadSessions) read sessions") }
         if summary.pathReferenceSessions > 0 { parts.append("\(summary.pathReferenceSessions) path sessions") }
         if let lastSeen = summary.lastSeen { parts.append("last \(lastSeen)") }
@@ -921,7 +922,7 @@ struct SkillLibraryView: View {
                 ForEach(AgentRuntime.allCases) { runtime in
                     let agentActivity = SkillActivitySummary(observations: summary.observations.filter { $0.runtime == runtime })
                     if !agentActivity.isEmpty {
-                        Text("\(runtime.rawValue): \(agentActivity.toolCalls) tool calls, \(agentActivity.fileReadSessions) read sessions, \(agentActivity.pathReferenceSessions) path-reference sessions\(agentActivity.failedToolCalls > 0 ? ", \(agentActivity.failedToolCalls) reported errors" : "")")
+                        Text("\(runtime.rawValue): \(agentActivity.toolCalls) tool calls, \(agentActivity.explicitInvocations) typed invocations, \(agentActivity.fileReadSessions) read sessions, \(agentActivity.pathReferenceSessions) path-reference sessions\(agentActivity.failedToolCalls > 0 ? ", \(agentActivity.failedToolCalls) reported errors" : "")")
                             .font(.caption).fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -932,7 +933,7 @@ struct SkillLibraryView: View {
                             .font(.caption2.monospaced()).foregroundStyle(DaddyTheme.muted).lineLimit(2).help(folder)
                     }
                 }
-                Text("Skill tool calls match a name; same-name copies may share those counts. File reads match this path. Codex path references are weaker evidence than a read. Cursor dates use transcript modification time. None proves task quality.")
+                Text("Skill tool calls, Claude slash commands and Codex $name mentions match a name; same-name copies may share those counts. File reads match this path. Codex path references are weaker evidence than a read. Cursor dates use transcript modification time. None proves task quality.")
                     .font(.caption2).foregroundStyle(DaddyTheme.muted).fixedSize(horizontal: false, vertical: true)
             }
         }
