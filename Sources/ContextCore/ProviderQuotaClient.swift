@@ -5,12 +5,14 @@ public enum ProviderQuotaError: Error, LocalizedError, Sendable, Equatable {
     case unsupportedProvider
     case missingCLI(String)
     case requestFailed(String)
+    case authenticationRequired(String)
 
     public var errorDescription: String? {
         switch self {
         case .unsupportedProvider: "This service has no verified provider-allowance adapter."
         case .missingCLI(let provider): "\(provider) CLI was not found. Install it and sign in before checking allowance."
         case .requestFailed(let provider): "\(provider) allowance is unavailable. Open its CLI and check the account session."
+        case .authenticationRequired(let provider): "\(provider) sign-in is required. Open its CLI, sign in, then check allowance again."
         }
     }
 }
@@ -19,10 +21,12 @@ public enum ProviderQuotaError: Error, LocalizedError, Sendable, Equatable {
 public struct ProviderQuotaClient: Sendable {
     private let codexURL: URL?
     private let claudeURL: URL?
+    private let grokURL: URL?
 
-    public init(codexURL: URL? = nil, claudeURL: URL? = nil) {
+    public init(codexURL: URL? = nil, claudeURL: URL? = nil, grokURL: URL? = nil) {
         self.codexURL = codexURL
         self.claudeURL = claudeURL
+        self.grokURL = grokURL
     }
 
     public func loadQuota(for service: UsageService) async throws -> ProviderQuotaReceipt {
@@ -30,6 +34,7 @@ public struct ProviderQuotaClient: Sendable {
         let reading = try await Task.detached(priority: .userInitiated) { () throws -> (status: ProviderQuotaStatus?, version: String?) in
             switch key {
             case "codex": return (try collectCodex(), nil)
+            case "grok": return (try collectGrok(), nil)
             case "claude":
                 do { return try collectClaude() }
                 catch {
@@ -49,7 +54,7 @@ public struct ProviderQuotaClient: Sendable {
                 status?.resetGrantError = (error as? ClaudeResetGrantError)?.errorDescription ?? "Claude reset-grant check failed."
             }
         }
-        guard let status else { throw ProviderQuotaError.requestFailed("Claude") }
+        guard let status else { throw ProviderQuotaError.requestFailed(service.rawValue) }
         return ProviderQuotaReceipt(schemaVersion: "contextdaddy.provider-quota/v1",
                                     generatedAt: ISO8601DateFormatter().string(from: Date()), providers: [status])
     }
@@ -81,6 +86,52 @@ public struct ProviderQuotaClient: Sendable {
         guard output.contains("Claude Code"),
               let range = output.range(of: #"[0-9]+\.[0-9]+\.[0-9]+"#, options: .regularExpression) else { return nil }
         return String(output[range])
+    }
+
+    /// ACP billing is an account read: no session/new, prompt, tool or reset request.
+    private func collectGrok() throws -> ProviderQuotaStatus {
+        guard let url = resolve("grok", explicit: grokURL) else { throw ProviderQuotaError.missingCLI("Grok") }
+        let process = Process()
+        process.executableURL = url
+        process.arguments = ["agent", "stdio"]
+        process.currentDirectoryURL = FileManager.default.temporaryDirectory
+        let input = Pipe()
+        let output = Pipe()
+        process.standardInput = input
+        process.standardOutput = output
+        process.standardError = FileHandle.nullDevice
+        let fd = output.fileHandleForReading.fileDescriptor
+        _ = fcntl(fd, F_SETFL, O_NONBLOCK)
+        do { try process.run() } catch { throw ProviderQuotaError.requestFailed("Grok") }
+        defer { try? input.fileHandleForWriting.close(); stop(process) }
+        var bytes = Data()
+        func request(_ id: Int, method: String, params: [String: Any]) throws -> [String: Any] {
+            let payload: [String: Any] = ["jsonrpc": "2.0", "id": id, "method": method, "params": params]
+            do { try input.fileHandleForWriting.write(contentsOf: JSONSerialization.data(withJSONObject: payload, options: .withoutEscapingSlashes) + Data([0x0a])) }
+            catch { throw ProviderQuotaError.requestFailed("Grok") }
+            let deadline = Date().addingTimeInterval(20)
+            while Date() < deadline, bytes.count < 256 * 1024 {
+                _ = readAvailable(fd, into: &bytes)
+                for line in bytes.split(separator: 0x0a) {
+                    guard let response = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
+                          response["id"] as? Int == id else { continue }
+                    if let error = response["error"] as? [String: Any], error["code"] as? Int == -32000 {
+                        throw ProviderQuotaError.authenticationRequired("Grok")
+                    }
+                    guard response["error"] == nil, let result = response["result"] as? [String: Any] else {
+                        throw ProviderQuotaError.requestFailed("Grok")
+                    }
+                    return result
+                }
+                if !process.isRunning { break }
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+            throw ProviderQuotaError.requestFailed("Grok")
+        }
+        _ = try request(0, method: "initialize", params: ["protocolVersion": 1, "clientCapabilities": [:],
+            "clientInfo": ["name": "contextdaddy", "version": "0.1.0"]])
+        let result = try request(1, method: "_x.ai/billing", params: [:])
+        return try ProviderQuotaParser.grok(result["result"] as? [String: Any] ?? result)
     }
 
     private func collectCodex() throws -> ProviderQuotaStatus {
@@ -221,7 +272,8 @@ public struct ProviderQuotaClient: Sendable {
     private func resolve(_ name: String, explicit: URL?) -> URL? {
         if let explicit { return FileManager.default.isExecutableFile(atPath: explicit.path) ? explicit : nil }
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let fixed = [home.appendingPathComponent(".local/bin/\(name)"),
+        let fixed = [home.appendingPathComponent(".\(name)/bin/\(name)"),
+                     home.appendingPathComponent(".local/bin/\(name)"),
                      URL(fileURLWithPath: "/opt/homebrew/bin/\(name)"),
                      URL(fileURLWithPath: "/usr/local/bin/\(name)")]
         let path = (ProcessInfo.processInfo.environment["PATH"] ?? "").split(separator: ":").map {
@@ -232,6 +284,53 @@ public struct ProviderQuotaClient: Sendable {
 }
 
 enum ProviderQuotaParser {
+    static func grok(_ result: [String: Any]) throws -> ProviderQuotaStatus {
+        guard let config = result["config"] as? [String: Any] else { throw ProviderQuotaError.requestFailed("Grok") }
+        func dollars(_ key: String) -> Double? {
+            guard let value = config[key] as? [String: Any] else { return nil }
+            // Grok's proto JSON represents a known zero-cent amount as {}.
+            guard let raw = value["val"] else { return 0 }
+            let cents = (raw as? NSNumber)?.doubleValue ?? (raw as? String).flatMap(Double.init)
+            guard let cents, cents.isFinite else { return nil }
+            return abs(cents) / 100
+        }
+        let includedUsed = dollars("used")
+        let includedLimit = dollars("monthlyLimit")
+        var used = config["creditUsagePercent"] as? Double
+        if used == nil, let includedUsed, let includedLimit, includedLimit > 0 {
+            used = includedUsed / includedLimit * 100
+        }
+        let period = config["currentPeriod"] as? [String: Any]
+        let end = period?["end"] as? String ?? config["billingPeriodEnd"] as? String
+        let type = period?["type"] as? String
+        let label = type?.contains("WEEKLY") == true ? "Weekly window" : type?.contains("MONTHLY") == true ? "Monthly window" : "Usage window"
+        var windows: [ProviderQuotaWindow] = []
+        if let used, used.isFinite {
+            let clamped = min(100, max(0, used))
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions.insert(.withFractionalSeconds)
+            let date = end.flatMap { formatter.date(from: $0) ?? ISO8601DateFormatter().date(from: $0) }
+            windows = [ProviderQuotaWindow(id: "grok.allowance", label: label, usedPercent: clamped,
+                remainingPercent: 100 - clamped, windowDurationMinutes: nil,
+                resetsAtUnix: date.map { Int64($0.timeIntervalSince1970) }, resetDescription: date == nil ? end : nil)]
+        }
+        let summary = GrokBillingSummary(prepaidUSD: dollars("prepaidBalance"),
+            onDemandEnabled: result["on_demand_enabled"] as? Bool,
+            onDemandUsedUSD: dollars("onDemandUsed"), onDemandCapUSD: dollars("onDemandCap"),
+            unifiedBilling: config["isUnifiedBillingUser"] as? Bool,
+            periodStart: period?["start"] as? String ?? config["billingPeriodStart"] as? String,
+            periodEnd: end, periodType: type,
+            includedUsedUSD: includedUsed, includedLimitUSD: includedLimit)
+        guard !windows.isEmpty || summary.prepaidUSD != nil || summary.onDemandEnabled != nil ||
+                summary.onDemandUsedUSD != nil || summary.onDemandCapUSD != nil else {
+            throw ProviderQuotaError.requestFailed("Grok")
+        }
+        return ProviderQuotaStatus(provider: "grok", status: "ready", source: "Grok CLI ACP x.ai/billing",
+            checkedAt: timestamp(), plan: result["subscription_tier"] as? String, windows: windows,
+            credits: nil, resetCredits: nil, latestReportedResetCreditExpiryUnix: nil,
+            resetCreditDetailsCount: nil, resetCreditsWithoutExpiryCount: nil, grokBilling: summary, message: nil)
+    }
+
     static func claudeVersion(_ display: String) -> String? {
         guard let range = display.range(of: #"Claude Code v[0-9]+\.[0-9]+\.[0-9]+"#, options: .regularExpression) else { return nil }
         return String(display[range]).replacingOccurrences(of: "Claude Code v", with: "")
@@ -293,6 +392,7 @@ enum ProviderQuotaParser {
         return ProviderQuotaStatus(provider: "codex", status: "ready", source: "codex app-server account/rateLimits/read",
                                    checkedAt: timestamp(), plan: plan, windows: windows,
                                    credits: credits, resetCredits: reset?.uint64Value,
+                                   earliestReportedResetCreditExpiryUnix: expiries?.min(),
                                    latestReportedResetCreditExpiryUnix: expiries?.max(),
                                    resetCreditDetailsCount: availableDetails.map { UInt64($0.count) },
                                    resetCreditsWithoutExpiryCount: noExpiryCount.map(UInt64.init), message: nil)

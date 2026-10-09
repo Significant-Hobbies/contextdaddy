@@ -182,3 +182,7 @@ returns to the same model, and active model-owned reads trigger native quit revi
 Native fixture captures cover the supported minimum 960×640, standard 1180×740
 and wide 1440×900 logical points, at the display's 2x scale. Interactive menu
 checks use synthetic discovery and do not qualify a published or installed build.
+
+## Provider allowance comparison
+
+The owner selected A, Compare providers, on 9 October 2026. Usage has one native comparison table with Codex, Claude and Grok columns. Aligned rows show reported allowance windows, scheduled resets, credit balances, reset grants and source disclosures. Codex leads with the first reported grant expiry and preserves partial-detail uncertainty. Claude retains scoped grants, paused states and the usage-settings fallback. Grok keeps prepaid USD credits and pay-as-you-go balances separate; missing fields remain unreported. Native fixture renders cover 960, 1180 and 1440 points; live Grok retrieval is separately verified or reported unavailable.
