@@ -33,7 +33,7 @@ jobs:
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
           repository: sass-maker/saas-maker
-          ref: bdea25593dab5857248255cc8cfe064260da35c9
+          ref: 67dcb59d289c396349244f42778dccbd2953ba41
           path: .daddy-tooling
           persist-credentials: false
       - name: Verify release tag and source commit
@@ -66,6 +66,8 @@ jobs:
         env:
           CALLER_REPOSITORY: ${{ github.repository }}
         run: |
+          python3 app/scripts/check-daddy-foundation.py --app contextdaddy
+          python3 -m unittest discover -s app/scripts -p 'test_*.py'
           python3 .daddy-tooling/tooling/daddy-macos/candidate.py \
             --app contextdaddy \
             --repository "$CALLER_REPOSITORY" \
@@ -76,14 +78,23 @@ jobs:
           echo '### Exact source gate' >> "$GITHUB_STEP_SUMMARY"
           echo 'The exact tagged source passed candidate checks. Packaging and notarization follow in this job.' >> "$GITHUB_STEP_SUMMARY"
           cat release-source-receipt.json release-candidate-receipt.json >> "$GITHUB_STEP_SUMMARY"
+      - name: Require published shared updater adoption
+        run: |
+          python3 - <<'PYGUARD'
+          import json
+          profile = json.load(open('.daddy-tooling/tooling/daddy-macos/profiles.json'))['apps']['contextdaddy']
+          if profile['updateMode'] != 'sparkle':
+              raise SystemExit('Publish the reviewed shared updater adoption and repin all four apps before releasing ContextDaddy')
+          PYGUARD
       - name: Require protected signing and notarization inputs
         env:
           CERT_READY: ${{ secrets.DEVELOPER_ID_CERT_P12_BASE64 != '' && secrets.DEVELOPER_ID_CERT_PASSWORD != '' && secrets.DEVELOPER_ID_IDENTITY != '' }}
           NOTARY_READY: ${{ secrets.APPLE_NOTARY_API_KEY_P8_BASE64 != '' && secrets.APPLE_NOTARY_KEY_ID != '' && secrets.APPLE_NOTARY_ISSUER_ID != '' }}
+          SPARKLE_READY: ${{ secrets.SPARKLE_ED25519_PRIVATE_KEY != '' }}
           SITE_READY: ${{ secrets.CLOUDFLARE_API_TOKEN != '' && secrets.CLOUDFLARE_ACCOUNT_ID != '' }}
         run: |
-          if [[ "$CERT_READY" != true || "$NOTARY_READY" != true || "$SITE_READY" != true ]]; then
-            echo 'Protected signing, notary, or Cloudflare inputs are not configured' >&2
+          if [[ "$CERT_READY" != true || "$NOTARY_READY" != true || "$SPARKLE_READY" != true || "$SITE_READY" != true ]]; then
+            echo 'Protected signing, notary, Sparkle, or Cloudflare inputs are not configured' >&2
             exit 1
           fi
       - name: Resolve exact release version
@@ -158,6 +169,10 @@ jobs:
             --notary-issuer-id "$NOTARY_ISSUER_ID" --ccusage "$RUNNER_TEMP/ccusage" \
             --output "$RUNNER_TEMP/release" --version "$VERSION" --build "$BUILD" \
             --source-sha "$SOURCE_SHA"
+      - name: Sign qualified Sparkle feed
+        env:
+          SPARKLE_ED25519_PRIVATE_KEY: ${{ secrets.SPARKLE_ED25519_PRIVATE_KEY }}
+        run: python3 app/scripts/prepare-appcast.py "$RUNNER_TEMP/release" "$RUNNER_TEMP/feed" --ed-key-stdin
       - name: Validate release metadata
         env:
           RELEASE_TAG: ${{ inputs.tag }}
@@ -172,6 +187,7 @@ jobs:
             --dmg "$RUNNER_TEMP/release/ContextDaddy-$VERSION-$BUILD-arm64.dmg" \
             --sums "$RUNNER_TEMP/release/SHA256SUMS" \
             --notary-json "$RUNNER_TEMP/release/notarization.json" \
+            --feed "$RUNNER_TEMP/feed/appcast.xml" \
             --previous-build "$(python3 -c 'import json; print(json.load(open("app/site/release.json"))["build"])')" --source-sha "$SOURCE_SHA" \
             --receipt "$RUNNER_TEMP/release/release-metadata-receipt.json"
       - name: Retain qualified release candidate
@@ -184,6 +200,7 @@ jobs:
             ${{ runner.temp }}/release/release-receipt.json
             ${{ runner.temp }}/release/SHA256SUMS
             ${{ runner.temp }}/release/release-metadata-receipt.json
+            ${{ runner.temp }}/feed/appcast.xml
           if-no-files-found: error
           retention-days: 7
 
@@ -207,7 +224,7 @@ jobs:
               raise SystemExit("main changed after release preflight; start a fresh manual release")
           PY
           dmg="$(find "$RUNNER_TEMP/release" -maxdepth 1 -name '*.dmg' -print -quit)"
-          python3 .daddy-tooling/tooling/daddy-macos/publish_site.py --app contextdaddy --repository "$CALLER_REPOSITORY" --site site-source/site --dmg "$dmg" --receipt "$RUNNER_TEMP/release/release-metadata-receipt.json" --output "$RUNNER_TEMP/publication.json"
+          python3 .daddy-tooling/tooling/daddy-macos/publish_site.py --app contextdaddy --repository "$CALLER_REPOSITORY" --site site-source/site --dmg "$dmg" --receipt "$RUNNER_TEMP/release/release-metadata-receipt.json" --feed "$RUNNER_TEMP/feed/appcast.xml" --output "$RUNNER_TEMP/publication.json"
       - name: Select Node.js for the site
         uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
@@ -226,7 +243,7 @@ jobs:
       - name: Verify live download and update feed
         run: |
           dmg="$(find "$RUNNER_TEMP/release" -maxdepth 1 -name '*.dmg' -print -quit)"
-          python3 .daddy-tooling/tooling/daddy-macos/verify_live.py --report "$RUNNER_TEMP/publication.json" --dmg "$dmg" --output "$RUNNER_TEMP/live-publication-receipt.json"
+          python3 .daddy-tooling/tooling/daddy-macos/verify_live.py --report "$RUNNER_TEMP/publication.json" --dmg "$dmg" --feed "$RUNNER_TEMP/feed/appcast.xml" --output "$RUNNER_TEMP/live-publication-receipt.json"
           cat "$RUNNER_TEMP/live-publication-receipt.json" >> "$GITHUB_STEP_SUMMARY"
       - name: Publish GitHub release
         env:
@@ -235,7 +252,7 @@ jobs:
           SOURCE_SHA: ${{ steps.source.outputs.source_sha }}
         run: |
           dmg="$(find "$RUNNER_TEMP/release" -maxdepth 1 -name '*.dmg' -print -quit)"
-          gh release create "$RELEASE_TAG" "$dmg" "$RUNNER_TEMP/release/SHA256SUMS" "$RUNNER_TEMP/release/release-metadata-receipt.json" "$RUNNER_TEMP/live-publication-receipt.json" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$RELEASE_TAG" --notes "Developer ID signed and Apple notarized. Source: $SOURCE_SHA. The live download was verified against the qualified artifact."
+          gh release create "$RELEASE_TAG" "$dmg" "$RUNNER_TEMP/release/SHA256SUMS" "$RUNNER_TEMP/feed/appcast.xml" "$RUNNER_TEMP/release/release-metadata-receipt.json" "$RUNNER_TEMP/live-publication-receipt.json" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$RELEASE_TAG" --notes "Developer ID signed and Apple notarized. Source: $SOURCE_SHA. The live download was verified against the qualified artifact."
       - name: Record published site metadata on main
         env:
           GH_TOKEN: ${{ github.token }}

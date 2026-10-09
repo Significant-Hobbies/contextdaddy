@@ -249,7 +249,7 @@ private struct MemoryEditorSheet: View {
                 Spacer()
                 if plan != nil {
                     Button("Back to editing") { plan = nil }.disabled(busy)
-                    Button(plan?.archive == true ? "Apply archive" : "Apply edit") { Task { busy = true; defer { busy = false }; do { _ = try await manager.apply(plan!.id); changed(); dismiss() } catch { failure = error.localizedDescription; plan = nil } } }.disabled(busy)
+                    Button(plan?.archive == true ? "Apply archive" : "Apply edit") { Task { busy = true; defer { busy = false }; do { _ = try await ContextUpdateActivity.perform { try await manager.apply(plan!.id) }; changed(); dismiss() } catch { failure = error.localizedDescription; plan = nil } } }.disabled(busy)
                 } else {
                     Button("Preview archive") { Task { do { plan = try await manager.prepareArchive(entry: entry); failure = nil } catch { failure = error.localizedDescription } } }.disabled(!loaded || !entry.editable || truncated || text != original)
                     Button("Preview changes") { Task { do { plan = try await manager.prepare(entry: entry, text: text); failure = nil } catch { failure = error.localizedDescription } } }.disabled(!loaded || !entry.editable || truncated || text == original)
@@ -291,7 +291,7 @@ private struct MemoryHistorySheet: View {
         .task { await reload() }
         .confirmationDialog("Restore the previous document?", isPresented: Binding(get: { restoring != nil }, set: { if !$0 { restoring = nil } })) {
             if let id = restoring {
-                Button("Restore") { restoring = nil; Task { do { try await manager.restore(id); changed(); await reload() } catch { failure = error.localizedDescription } } }
+                Button("Restore") { restoring = nil; Task { do { try await ContextUpdateActivity.perform { try await manager.restore(id) }; changed(); await reload() } catch { failure = error.localizedDescription } } }
             }
             Button("Cancel", role: .cancel) { restoring = nil }
         }

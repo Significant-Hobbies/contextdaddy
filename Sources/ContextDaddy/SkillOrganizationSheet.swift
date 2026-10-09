@@ -237,7 +237,7 @@ struct SkillOrganizationSheet: View {
             var completed = 0
             for plan in selected {
                 do {
-                    _ = try await manager.apply(plan.id)
+                    _ = try await ContextUpdateActivity.perform { try await manager.apply(plan.id) }
                     completed += 1
                     if action == .move || action == .share {
                         let parent = URL(fileURLWithPath: plan.destination).deletingLastPathComponent().path

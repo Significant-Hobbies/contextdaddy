@@ -18,14 +18,17 @@ jobs:
       - uses: actions/checkout@v5
       # DesignSnapshotTests render machine-local inventory and are reviewed on
       # the release Mac; portable behavior tests run on the clean runner.
+      - run: python3 scripts/check-daddy-foundation.py --app contextdaddy
       - run: swift test --skip DesignSnapshotTests
       - run: swift build -c release
+      - run: python3 -m unittest test_sparkle_support test_release_source test_package_sparkle test_prepare_appcast
+        working-directory: scripts
 
   shared_candidate:
-    uses: sass-maker/saas-maker/.github/workflows/daddy-macos-candidate.yml@bdea25593dab5857248255cc8cfe064260da35c9
+    uses: sass-maker/saas-maker/.github/workflows/daddy-macos-candidate.yml@67dcb59d289c396349244f42778dccbd2953ba41
     with:
       app: contextdaddy
-      tooling-ref: bdea25593dab5857248255cc8cfe064260da35c9
+      tooling-ref: 67dcb59d289c396349244f42778dccbd2953ba41
 
   site:
     runs-on: ubuntu-latest

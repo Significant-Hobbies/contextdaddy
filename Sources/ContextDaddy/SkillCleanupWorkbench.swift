@@ -418,7 +418,7 @@ struct SkillCleanupApplySheet: View {
                         Task {
                             var count = 0
                             do {
-                                for plan in batch.plans where selected.contains(plan.id) { _ = try await manager.apply(plan.id); count += 1 }
+                                for plan in batch.plans where selected.contains(plan.id) { _ = try await ContextUpdateActivity.perform { try await manager.apply(plan.id) }; count += 1 }
                                 result = "Applied \(count) changes. Recovery is available in History."
                             } catch { result = "Applied \(count) changes, then stopped: \(error.localizedDescription) Check History before trying again." }
                             await completed(); working = false
@@ -559,7 +559,7 @@ struct SkillCleanupHistorySheet: View {
                                     busy = true
                                     Task {
                                         defer { busy = false }
-                                        do { try await manager.restore(receipt.id); receipts = try await manager.history(); await completed() }
+                                        do { try await ContextUpdateActivity.perform { try await manager.restore(receipt.id) }; receipts = try await manager.history(); await completed() }
                                         catch { self.error = error.localizedDescription }
                                     }
                                 }.disabled(busy)

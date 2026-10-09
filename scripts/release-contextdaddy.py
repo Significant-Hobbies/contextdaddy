@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import sys
+import sparkle_support
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -59,6 +60,8 @@ def main():
     if (args.notary_profile and any(api_auth)) or (any(api_auth) and not all(api_auth)) or not (args.notary_profile or all(api_auth)):
         parser.error("Pass a Keychain profile or the complete API key, key ID, and issuer ID")
 
+    # A distributed updater must have its dedicated public key before signing.
+    sparkle_support.configuration()
     binary = ROOT / ".build/release/ContextDaddy"
     if not binary.is_file():
         parser.error("Build the release executable first with swift build -c release")
@@ -82,10 +85,11 @@ def main():
     app = stage / "ContextDaddy.app"
     run(sys.executable, ROOT / "scripts/package-contextdaddy.py", binary,
         "--ccusage", args.ccusage.resolve(), "--output", app, "--unsigned",
-        "--version", args.version, "--build", args.build)
+        "--version", args.version, "--build", args.build, "--enable-updates")
     info = plistlib.loads((app / "Contents/Info.plist").read_bytes())
     helper = app / "Contents/Helpers/ccusage"
     run("codesign", "--force", "--sign", args.identity, "--timestamp", "--options", "runtime", helper)
+    sparkle_support.sign(app, args.identity)
     run("codesign", "--force", "--sign", args.identity, "--timestamp", "--options", "runtime", app)
     run("codesign", "--verify", "--deep", "--strict", app)
 
