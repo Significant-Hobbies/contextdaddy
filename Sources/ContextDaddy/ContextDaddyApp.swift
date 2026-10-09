@@ -17,6 +17,9 @@ struct ContextDaddyApp: App {
                 .task { updates.start(model: model) }
         }
         .defaultSize(width: 1180, height: 740)
+        // Keep the window at least as wide as RootView's minimum; a narrower
+        // window would center the overflowing content and cut off its left edge.
+        .windowResizability(.contentMinSize)
         .defaultPosition(.center)
         .windowStyle(.titleBar)
         .commands {

@@ -177,7 +177,9 @@ struct ScreenHeader: View {
     private var horizontalHeader: some View {
         HStack(alignment: .center, spacing: 22) {
             VStack(alignment: .leading, spacing: 7) {
-                Text(eyebrow.uppercased()).font(.system(size: 10, weight: .bold, design: .rounded)).tracking(1).foregroundStyle(DaddyTheme.mint)
+                if !eyebrow.isEmpty {
+                    Text(eyebrow.uppercased()).font(.system(size: 10, weight: .bold, design: .rounded)).tracking(1).foregroundStyle(DaddyTheme.mint)
+                }
                 Text(title).font(.system(size: 27, weight: .semibold, design: .rounded)).tracking(-0.5)
                 Text(subtitle).font(.subheadline).foregroundStyle(DaddyTheme.muted).fixedSize(horizontal: false, vertical: true)
             }
@@ -194,7 +196,9 @@ struct ScreenHeader: View {
     private var compactHeader: some View {
         HStack(alignment: .top, spacing: 14) {
             VStack(alignment: .leading, spacing: 6) {
-                Text(eyebrow.uppercased()).font(.system(size: 10, weight: .bold, design: .rounded)).tracking(1).foregroundStyle(DaddyTheme.mint)
+                if !eyebrow.isEmpty {
+                    Text(eyebrow.uppercased()).font(.system(size: 10, weight: .bold, design: .rounded)).tracking(1).foregroundStyle(DaddyTheme.mint)
+                }
                 Text(title).font(.system(size: 22, weight: .semibold, design: .rounded)).tracking(-0.4)
                 Text(subtitle).font(.caption).foregroundStyle(DaddyTheme.muted).lineLimit(2)
             }

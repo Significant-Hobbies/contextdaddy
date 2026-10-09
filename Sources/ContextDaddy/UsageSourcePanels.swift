@@ -1,152 +1,242 @@
 import ContextCore
 import SwiftUI
 
+/// Account allowance, one provider at a time. A provider with a reading gets
+/// one focal number; providers without one collapse to a single quiet line.
 struct UsageAllowanceView: View {
     @Environment(ContextDaddyModel.self) private var model
     let stacked: Bool
-    private let providers = ["codex", "claude", "grok"]
+    /// Focal number beside its detail list; below it when the page is narrow.
+    var sideBySide = true
+    static let providers = ["codex", "claude", "grok"]
 
     var body: some View {
         @Bindable var model = model
+        let read = Self.providers.filter { model.quotaStatus(for: $0) != nil }
+        let unread = Self.providers.filter { model.quotaStatus(for: $0) == nil }
         VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("PROVIDER ALLOWANCE").font(.caption.weight(.bold)).tracking(1).foregroundStyle(DaddyTheme.mint)
-                Spacer()
-                Button(model.isQuotaLoading ? "Checking…" : "Check allowances") {
-                    Task { await model.refreshAllQuotas() }
-                }.disabled(model.isQuotaLoading)
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                UsageSectionTitle(title: "allowance", detail: "What each provider says is left on your account.")
+                Spacer(minLength: 12)
+                checkAllControl
             }
-            Panel(padding: stacked ? 12 : 18) {
-                Grid(alignment: .topLeading, horizontalSpacing: stacked ? 12 : 20, verticalSpacing: 14) {
-                    row("Allowance") { provider in
-                        providerHeading(provider)
+            Panel(padding: stacked ? 16 : 22) {
+                VStack(alignment: .leading, spacing: 0) {
+                    ForEach(Array(read.enumerated()), id: \.element) { index, provider in
+                        if index > 0 { separator }
+                        providerReading(provider)
+                            .padding(.top, index == 0 ? 0 : 18)
+                            .padding(.bottom, 18)
                     }
-                    rule
-                    row("5-hour remaining") { provider in
-                        percentageCell(provider, kind: "short")
-                    }
-                    row("Weekly remaining") { provider in
-                        percentageCell(provider, kind: "weekly")
-                    }
-                    if providers.contains(where: { windows(for: $0, kind: "other").isEmpty == false }) {
-                        row("Other windows") { provider in
-                            percentageCell(provider, kind: "other")
+                    if !unread.isEmpty {
+                        if !read.isEmpty { separator }
+                        VStack(alignment: .leading, spacing: 12) {
+                            ForEach(unread, id: \.self) { unreadRow($0) }
                         }
+                        .padding(.top, read.isEmpty ? 0 : 16)
                     }
-                    rule
-                    row("Scheduled resets") { provider in
-                        VStack(alignment: .leading, spacing: 8) {
-                            if let status = readyStatus(provider), !status.windows.isEmpty {
-                                ForEach(status.windows, id: \.id) { window in
-                                    VStack(alignment: .leading, spacing: 3) {
-                                        Text(window.label).font(.caption.weight(.semibold))
-                                        Text(Self.windowResetText(window) ?? "Reset time not reported")
-                                            .font(.caption).foregroundStyle(DaddyTheme.muted)
-                                    }
-                                }
-                            } else if let end = readyStatus(provider)?.grokBilling?.periodEnd {
-                                Text("Resets · \(end)").font(.caption).foregroundStyle(DaddyTheme.muted)
-                            } else { missingValue(provider) }
-                        }
-                    }
-                    rule
-                    row("Credit balance") { provider in
-                        VStack(alignment: .leading, spacing: 4) {
-                            if let status = readyStatus(provider) {
-                                Text(Self.creditText(status) ?? "Not reported").font(.callout.weight(.medium))
-                                Text(provider == "claude" ? "Paid usage credits" : provider == "grok" ? "Prepaid balance · USD" : "Codex credit units")
-                                    .font(.caption2).foregroundStyle(DaddyTheme.muted)
-                            } else { missingValue(provider) }
-                        }
-                    }
-                    row("Reset grants & expiry") { provider in
-                        VStack(alignment: .leading, spacing: 6) {
-                            if let status = readyStatus(provider) {
-                                if let grants = status.claudeResetGrants, provider == "claude" {
-                                    claudeGrantRows(grants)
-                                } else {
-                                    Text(Self.resetCountText(status)).font(.callout.weight(.medium))
-                                }
-                                if provider == "codex", status.resetCredits != nil { resetExpiry(status) }
-                                if let error = status.resetGrantError {
-                                    Text(error).font(.caption2).foregroundStyle(DaddyTheme.amber)
-                                }
-                                if provider == "claude", status.claudeResetGrants == nil, status.resetCredits == nil {
-                                    claudeUsageLink
-                                }
-                            } else { missingValue(provider) }
-                        }
-                    }
-                    if readyStatus("grok")?.grokBilling != nil {
-                        row("Pay as you go") { provider in
-                            if let billing = readyStatus(provider)?.grokBilling {
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(billing.onDemandEnabled.map { $0 ? "Enabled" : "Disabled" } ?? "Not reported")
-                                    if let used = billing.onDemandUsedUSD {
-                                        Text("Used · \(used.formatted(.currency(code: "USD")))")
-                                    }
-                                    if let cap = billing.onDemandCapUSD {
-                                        Text("Cap · \(cap.formatted(.currency(code: "USD")))")
-                                    }
-                                }.font(.caption)
-                            } else { Text("Not reported").font(.caption).foregroundStyle(DaddyTheme.muted) }
-                        }
-                    }
-                    rule
-                    row("Source & details") { provider in
-                        readingDetails(provider)
-                    }
-                }.frame(maxWidth: .infinity, alignment: .leading)
-            }
-            Toggle("Check allowances when opening Usage", isOn: $model.autoCheckAllowance)
-                .font(.caption).toggleStyle(.switch).controlSize(.small)
-                .onChange(of: model.autoCheckAllowance) { _, enabled in
-                    if enabled { Task { await model.autoRefreshQuotasIfNeeded() } }
                 }
-            Text("Account allowance is separate from local token history. Checks may contact Codex, Claude and Grok using their existing sign-in. Automatic checks are opt-in, at most once every 15 minutes.")
-                .font(.caption2).foregroundStyle(DaddyTheme.muted)
-        }.frame(maxWidth: .infinity, alignment: .leading)
-            .task { await model.autoRefreshQuotasIfNeeded() }
-    }
-
-    private var rule: some View {
-        GridRow { Divider().overlay(DaddyTheme.line).gridCellColumns(4) }
-    }
-
-    private func row<Cell: View>(_ label: String, @ViewBuilder cell: @escaping (String) -> Cell) -> some View {
-        GridRow(alignment: .top) {
-            Text(label).font(.callout).foregroundStyle(DaddyTheme.muted)
-                .frame(width: stacked ? 108 : 145, alignment: .leading)
-            ForEach(providers, id: \.self) { provider in
-                cell(provider).frame(minWidth: 0, maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            VStack(alignment: .leading, spacing: 4) {
+                Toggle("check allowances when opening usage", isOn: $model.autoCheckAllowance)
+                    .font(.caption).toggleStyle(.switch).controlSize(.small)
+                    .onChange(of: model.autoCheckAllowance) { _, enabled in
+                        if enabled { Task { await model.autoRefreshQuotasIfNeeded() } }
+                    }
+                Text("Separate from local token history. Checks use each provider's existing sign-in; automatic checks are opt-in and run at most every 15 minutes.")
+                    .font(.caption2).foregroundStyle(DaddyTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                    .accessibilityElement(children: .combine)
-                    .accessibilityHint("\(provider.capitalized), \(label)")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .task { await model.autoRefreshQuotasIfNeeded() }
+    }
+
+    @ViewBuilder private var checkAllControl: some View {
+        if model.isQuotaLoading {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text("checking…").font(.caption).foregroundStyle(DaddyTheme.muted)
+            }
+        } else {
+            Button("check all") { Task { await model.refreshAllQuotas() } }
+        }
+    }
+
+    private var separator: some View {
+        Rectangle().fill(DaddyTheme.line).frame(height: 1)
+    }
+
+    // MARK: Provider with a reading
+
+    private func providerReading(_ provider: String) -> some View {
+        let status = model.quotaStatus(for: provider)
+        let ready = readyStatus(provider)
+        let error = model.quotaErrors[provider]
+        return VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(provider).font(.system(size: 17, weight: .bold, design: .rounded))
+                if let plan = status?.plan {
+                    Text(plan).font(.caption).foregroundStyle(DaddyTheme.muted).lineLimit(1)
+                }
+                Spacer(minLength: 8)
+                Text(stateText(provider)).font(.caption.weight(.semibold))
+                    .foregroundStyle(stateColor(provider))
+            }
+            if let ready {
+                if sideBySide {
+                    HStack(alignment: .top, spacing: 32) {
+                        focal(ready).frame(width: 210, alignment: .leading)
+                        details(ready).frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 16) {
+                        focal(ready)
+                        details(ready)
+                    }
+                }
+            } else {
+                Text(status?.message ?? "The provider did not return an allowance reading.")
+                    .font(.callout).foregroundStyle(DaddyTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            if let error {
+                Text("Latest check failed; showing the saved reading. \(error)")
+                    .font(.caption).foregroundStyle(DaddyTheme.amber)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            readingDetails(provider)
+        }
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel("\(provider.capitalized) allowance")
+    }
+
+    /// The single number this provider is judged by: the weekly window when
+    /// reported, otherwise the tightest window.
+    static func focalWindow(_ status: ProviderQuotaStatus) -> ProviderQuotaWindow? {
+        status.windows.first { windowKind($0) == "weekly" }
+            ?? status.windows.min { $0.remainingPercent < $1.remainingPercent }
+    }
+
+    @ViewBuilder private func focal(_ status: ProviderQuotaStatus) -> some View {
+        if let window = Self.focalWindow(status) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("\(Int(window.remainingPercent.rounded()))%")
+                    .font(.system(size: stacked ? 40 : 48, weight: .bold, design: .rounded))
+                    .monospacedDigit().foregroundStyle(health(window.remainingPercent).1)
+                Text("\(Self.windowName(window)) left")
+                    .font(.callout.weight(.semibold))
+                if let pace = paceLabel(window) {
+                    Text(pace).font(.caption).foregroundStyle(DaddyTheme.muted)
+                }
+                Text(Self.windowResetText(window) ?? "Reset time not reported")
+                    .font(.caption).foregroundStyle(DaddyTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .accessibilityElement(children: .combine)
+        } else {
+            Text("No usage windows reported")
+                .font(.callout).foregroundStyle(DaddyTheme.muted)
+        }
+    }
+
+    private func details(_ status: ProviderQuotaStatus) -> some View {
+        let focalID = Self.focalWindow(status)?.id
+        return VStack(alignment: .leading, spacing: 11) {
+            ForEach(status.windows.filter { $0.id != focalID }, id: \.id) { window in
+                detailRow(Self.windowName(window)) {
+                    Text("\(Int(window.remainingPercent.rounded()))% left")
+                        .foregroundStyle(health(window.remainingPercent).1).monospacedDigit()
+                    Text([paceLabel(window), Self.windowResetText(window) ?? "Reset time not reported"]
+                        .compactMap { $0 }.joined(separator: " · "))
+                        .font(.caption).foregroundStyle(DaddyTheme.muted)
+                }
+            }
+            if status.windows.isEmpty, let end = status.grokBilling?.periodEnd {
+                detailRow("period") { Text("Resets · \(end)") }
+            }
+            detailRow("credits") {
+                Text(Self.creditText(status) ?? "Not reported")
+                Text(status.provider == "claude" ? "Paid usage credits" : status.provider == "grok" ? "Prepaid balance · USD" : "Codex credit units")
+                    .font(.caption).foregroundStyle(DaddyTheme.muted)
+            }
+            detailRow("reset grants") {
+                if let grants = status.claudeResetGrants, status.provider == "claude" {
+                    claudeGrantRows(grants)
+                } else {
+                    Text(Self.resetCountText(status))
+                }
+                if status.provider == "codex", status.resetCredits != nil { resetExpiry(status) }
+                if let error = status.resetGrantError {
+                    Text(error).font(.caption).foregroundStyle(DaddyTheme.amber)
+                }
+                if status.provider == "claude", status.claudeResetGrants == nil, status.resetCredits == nil {
+                    claudeUsageLink
+                }
+            }
+            if let billing = status.grokBilling {
+                detailRow("pay as you go") {
+                    Text(billing.onDemandEnabled.map { $0 ? "Enabled" : "Disabled" } ?? "Not reported")
+                    let spend = [billing.onDemandUsedUSD.map { "Used \($0.formatted(.currency(code: "USD")))" },
+                                 billing.onDemandCapUSD.map { "cap \($0.formatted(.currency(code: "USD")))" }]
+                        .compactMap { $0 }
+                    if !spend.isEmpty {
+                        Text(spend.joined(separator: " · ")).font(.caption).foregroundStyle(DaddyTheme.muted)
+                    }
+                }
             }
         }
     }
+
+    private func detailRow<Value: View>(_ label: String, @ViewBuilder value: () -> Value) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 14) {
+            Text(label).font(.callout).foregroundStyle(DaddyTheme.muted)
+                .frame(width: 112, alignment: .leading)
+            VStack(alignment: .leading, spacing: 3) { value() }
+                .font(.callout)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: Provider without a reading
+
+    private func unreadRow(_ provider: String) -> some View {
+        let error = model.quotaErrors[provider]
+        return HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(provider).font(.system(size: 15, weight: .semibold, design: .rounded))
+                .frame(width: 64, alignment: .leading)
+            Text(error.map { "Check failed. \($0)" } ?? "Not checked yet")
+                .font(.caption).foregroundStyle(error == nil ? DaddyTheme.muted : DaddyTheme.amber)
+                .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+            if !model.isQuotaLoading, let service = UsageService.allCases.first(where: { $0.quotaKey == provider }) {
+                Button("check") { Task { await model.refreshQuotas(for: [service]) } }
+                    .buttonStyle(.plain).font(.callout.weight(.semibold)).foregroundStyle(DaddyTheme.mint)
+                    .accessibilityLabel("Check \(provider.capitalized) allowance")
+            }
+        }
+    }
+
+    // MARK: Shared pieces
 
     private func readyStatus(_ provider: String) -> ProviderQuotaStatus? {
         guard let status = model.quotaStatus(for: provider), status.status == "ready" else { return nil }
         return status
     }
 
-    private func providerHeading(_ provider: String) -> some View {
-        let status = readyStatus(provider)
-        let error = model.quotaErrors[provider]
-        let remaining = status?.windows.map(\.remainingPercent).min()
-        return VStack(alignment: .leading, spacing: 5) {
-            Text(provider.capitalized).font(.title3.weight(.semibold))
-            if let plan = status?.plan { Text(plan).font(.caption).foregroundStyle(DaddyTheme.muted) }
-            Text(error != nil ? (status == nil ? "Unavailable" : "Stale") : status == nil ? "Not checked" : remaining.map { health($0).0 } ?? "Ready")
-                .font(.caption2.weight(.semibold))
-                .foregroundStyle(error != nil ? DaddyTheme.amber : remaining.map { health($0).1 } ?? DaddyTheme.muted)
-        }
+    private func stateText(_ provider: String) -> String {
+        let remaining = readyStatus(provider).flatMap { Self.focalWindow($0)?.remainingPercent }
+        if model.quotaErrors[provider] != nil { return readyStatus(provider) == nil ? "unavailable" : "stale" }
+        if readyStatus(provider) == nil { return "no reading" }
+        return remaining.map { health($0).0 } ?? "ready"
     }
 
-    @ViewBuilder private func missingValue(_ provider: String) -> some View {
-        Text(readyStatus(provider) != nil ? "Not reported" : model.quotaErrors[provider] != nil ? "Unavailable" : "Not checked")
-            .font(.caption).foregroundStyle(DaddyTheme.muted)
+    private func stateColor(_ provider: String) -> Color {
+        if model.quotaErrors[provider] != nil { return DaddyTheme.amber }
+        let remaining = readyStatus(provider).flatMap { Self.focalWindow($0)?.remainingPercent }
+        return remaining.map { health($0).1 } ?? DaddyTheme.muted
     }
 
     static func windowKind(_ window: ProviderQuotaWindow) -> String {
@@ -155,68 +245,50 @@ struct UsageAllowanceView: View {
         return "other"
     }
 
-    private func windows(for provider: String, kind: String) -> [ProviderQuotaWindow] {
-        readyStatus(provider)?.windows.filter { Self.windowKind($0) == kind } ?? []
-    }
-
-    @ViewBuilder private func percentageCell(_ provider: String, kind: String) -> some View {
-        let readings = windows(for: provider, kind: kind)
-        if readings.isEmpty { missingValue(provider) }
-        else {
-            VStack(alignment: .leading, spacing: 8) {
-                ForEach(readings, id: \.id) { window in
-                    VStack(alignment: .leading, spacing: 3) {
-                        if kind == "other" { Text(window.label).font(.caption).foregroundStyle(DaddyTheme.muted) }
-                        Text("\(Int(window.remainingPercent.rounded()))%")
-                            .font(.system(size: stacked ? 25 : 31, weight: .semibold, design: .rounded))
-                            .monospacedDigit().foregroundStyle(health(window.remainingPercent).1)
-                        if let pace = paceLabel(window) { Text(pace).font(.caption2).foregroundStyle(DaddyTheme.muted) }
-                    }
-                }
-            }
+    static func windowName(_ window: ProviderQuotaWindow) -> String {
+        switch windowKind(window) {
+        case "short": "5-hour"
+        case "weekly": "weekly"
+        default: window.label.lowercased()
         }
     }
 
     @ViewBuilder private func readingDetails(_ provider: String) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            if let error = model.quotaErrors[provider] {
-                Text("Latest check failed. \(error)").font(.caption2).foregroundStyle(DaddyTheme.amber)
+        if let status = model.quotaStatus(for: provider) {
+            DisclosureGroup("source & details") {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(status.source)
+                    Text("Checked · \(status.checkedAt)")
+                    if model.quotaErrors[provider] != nil { Text("Saved reading may be stale.").foregroundStyle(DaddyTheme.amber) }
+                    if let message = status.message { Text(message) }
+                    if let grants = status.claudeResetGrants { Text("Reset grants checked · \(grants.checkedAt)") }
+                    if let latest = status.latestReportedResetCreditExpiryUnix {
+                        Text("Latest reported grant expiry · \(Date(timeIntervalSince1970: TimeInterval(latest)).formatted(date: .abbreviated, time: .shortened))")
+                    }
+                    if let count = status.resetCreditsWithoutExpiryCount, count > 0 {
+                        Text("\(count) reported grants have no expiry.")
+                    }
+                    if let billing = status.grokBilling {
+                        if let unified = billing.unifiedBilling { Text(unified ? "Shared usage pool" : "Legacy billing") }
+                        if let start = billing.periodStart { Text("Period start · \(start)") }
+                        if let end = billing.periodEnd { Text("Period end · \(end)") }
+                        if let type = billing.periodType { Text("Reported period · \(type)") }
+                        if let used = billing.includedUsedUSD { Text("Included used · \(used.formatted(.currency(code: "USD")))") }
+                        if let limit = billing.includedLimitUSD { Text("Included limit · \(limit.formatted(.currency(code: "USD")))") }
+                    }
+                }
+                .font(.caption).foregroundStyle(DaddyTheme.muted).textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.top, 6)
             }
-            if let status = model.quotaStatus(for: provider) {
-                DisclosureGroup("Reading details") {
-                    VStack(alignment: .leading, spacing: 5) {
-                        Text(status.source)
-                        Text("Checked · \(status.checkedAt)")
-                        if model.quotaErrors[provider] != nil { Text("Saved reading may be stale.").foregroundStyle(DaddyTheme.amber) }
-                        if let message = status.message { Text(message) }
-                        if let grants = status.claudeResetGrants { Text("Reset grants checked · \(grants.checkedAt)") }
-                        if let latest = status.latestReportedResetCreditExpiryUnix {
-                            Text("Latest reported grant expiry · \(Date(timeIntervalSince1970: TimeInterval(latest)).formatted(date: .abbreviated, time: .shortened))")
-                        }
-                        if let count = status.resetCreditsWithoutExpiryCount, count > 0 {
-                            Text("\(count) reported grants have no expiry.")
-                        }
-                        if let billing = status.grokBilling {
-                            if let unified = billing.unifiedBilling { Text(unified ? "Shared usage pool" : "Legacy billing") }
-                            if let start = billing.periodStart { Text("Period start · \(start)") }
-                            if let end = billing.periodEnd { Text("Period end · \(end)") }
-                            if let type = billing.periodType { Text("Reported period · \(type)") }
-                            if let used = billing.includedUsedUSD { Text("Included used · \(used.formatted(.currency(code: "USD")))") }
-                            if let limit = billing.includedLimitUSD { Text("Included limit · \(limit.formatted(.currency(code: "USD")))") }
-                        }
-                    }.font(.caption2).foregroundStyle(DaddyTheme.muted).textSelection(.enabled)
-                        .padding(.top, 6)
-                }.font(.caption).foregroundStyle(DaddyTheme.muted)
-            } else {
-                Text("Check allowances for an account reading.").font(.caption2).foregroundStyle(DaddyTheme.muted)
-            }
+            .font(.caption).foregroundStyle(DaddyTheme.muted)
         }
     }
 
     private func health(_ remaining: Double) -> (String, Color) {
-        if remaining <= 20 { return ("Low", DaddyTheme.coral) }
-        if remaining <= 40 { return ("Watch", DaddyTheme.amber) }
-        return ("Healthy", DaddyTheme.mint)
+        if remaining <= 20 { return ("low", DaddyTheme.coral) }
+        if remaining <= 40 { return ("watch", DaddyTheme.amber) }
+        return ("healthy", DaddyTheme.mint)
     }
 
     private func paceLabel(_ window: ProviderQuotaWindow) -> String? {
@@ -280,16 +352,16 @@ struct UsageAllowanceView: View {
         ForEach(["full", "five-hour"], id: \.self) { kind in
             VStack(alignment: .leading, spacing: 4) {
                 Text(Self.claudeGrantCountText(kind == "full" ? summary.fullCount : summary.fiveHourCount, kind: kind))
-                    .font(.callout.weight(.semibold)).monospacedDigit()
+                    .font(.callout).monospacedDigit()
                     .fixedSize(horizontal: false, vertical: true)
                 ForEach(summary.grants.indices.filter { summary.grants[$0].kind == kind }, id: \.self) { index in
                     let grant = summary.grants[index]
                     Text("\(grant.count == 1 ? "Expires" : "\(grant.count) expire") · \(Date(timeIntervalSince1970: TimeInterval(grant.expiresAtUnix)).formatted(date: .abbreviated, time: .omitted))")
-                        .font(.caption2).foregroundStyle(DaddyTheme.muted)
+                        .font(.caption).foregroundStyle(DaddyTheme.muted)
                         .fixedSize(horizontal: false, vertical: true)
                     if grant.paused || !grant.usableNow {
                         Text(grant.paused ? "Paused" : "Not usable right now")
-                            .font(.caption2).foregroundStyle(DaddyTheme.amber)
+                            .font(.caption).foregroundStyle(DaddyTheme.amber)
                     }
                 }
             }
@@ -305,7 +377,7 @@ struct UsageAllowanceView: View {
     @ViewBuilder private func resetExpiry(_ status: ProviderQuotaStatus) -> some View {
         if let unix = status.earliestReportedResetCreditExpiryUnix {
             Text("First reported expiry · \(Date(timeIntervalSince1970: TimeInterval(unix)).formatted(date: .abbreviated, time: .shortened))")
-                .font(.caption2.weight(.semibold)).foregroundStyle(DaddyTheme.muted)
+                .font(.caption).foregroundStyle(DaddyTheme.muted)
         } else if (status.resetCredits ?? 0) > 0 {
             Text(status.resetCreditsWithoutExpiryCount == status.resetCredits
                  ? "Reported reset grants do not expire" : "Reset-grant expiry unavailable")
@@ -314,6 +386,20 @@ struct UsageAllowanceView: View {
         if let details = status.resetCreditDetailsCount, details < (status.resetCredits ?? 0) {
             Text("Only \(details) of \(status.resetCredits ?? 0) grant details reported; an earlier expiry may exist.")
                 .font(.caption2).foregroundStyle(DaddyTheme.amber)
+        }
+    }
+}
+
+/// Quiet lowercase section heading shared by the Usage page sections.
+struct UsageSectionTitle: View {
+    let title: String
+    let detail: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).font(.system(size: 20, weight: .bold, design: .rounded)).tracking(-0.3)
+            Text(detail).font(.caption).foregroundStyle(DaddyTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
         }
     }
 }

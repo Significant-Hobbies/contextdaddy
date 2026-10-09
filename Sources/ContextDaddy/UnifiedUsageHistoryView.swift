@@ -13,46 +13,34 @@ struct UnifiedUsageHistoryView: View {
         @Bindable var model = model
         let history = model.usageHistory
         let agents = model.availableHistoryAgents
-        return Panel(padding: 20) {
+        return VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                UsageSectionTitle(
+                    title: "history",
+                    detail: model.usageHistoryGrouping == .project
+                        ? "Local history, not allowance. Projects come from agent sessions, bucketed by last activity."
+                        : "Local history, not allowance. Generated tokens, cache reads and estimated costs across agents, including Devin."
+                )
+                Spacer(minLength: 12)
+                Button(model.isUsageLoading ? "reading…" : "refresh") {
+                    Task { await model.refreshUsage(force: true) }
+                }.disabled(model.isUsageLoading)
+            }
+        Panel(padding: 20) {
             VStack(alignment: .leading, spacing: 15) {
-                HStack(alignment: .top, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("LOCAL HISTORY · NOT PROVIDER ALLOWANCE")
-                            .font(.system(size: 10, weight: .bold, design: .rounded))
-                            .tracking(1).foregroundStyle(DaddyTheme.mint)
-                        Text("Historical usage").font(.title3.weight(.semibold))
-                        Text(model.usageHistoryGrouping == .project
-                             ? "Project identities from agent sessions · bucketed by last activity, separate from daily accounting."
-                             : "Local agent history, including Devin · generated tokens, cache reads, and available estimated costs.")
-                            .font(.caption).foregroundStyle(DaddyTheme.muted)
-                    }
-                    Spacer(minLength: 0)
-                    Button(model.isUsageLoading ? "Reading…" : "Refresh") {
-                        Task { await model.refreshUsage(force: true) }
-                    }.disabled(model.isUsageLoading)
-                }
-
-                controls
-
-                if !agents.isEmpty {
-                    HStack(spacing: 7) {
-                        ForEach(agents, id: \.self) { agent in
-                            let included = model.usageHistoryAgents.isEmpty || model.usageHistoryAgents.contains(agent)
-                            Button { toggle(agent, among: agents) } label: {
-                                HStack(spacing: 5) {
-                                    Circle().fill(included ? DaddyTheme.mint : DaddyTheme.muted).frame(width: 6, height: 6)
-                                    Text(agent.capitalized)
-                                }
-                                .font(.caption.weight(.semibold))
-                                .padding(.horizontal, 10).frame(height: 32)
-                                .background(included ? DaddyTheme.mint.opacity(0.1) : DaddyTheme.raised,
-                                            in: RoundedRectangle(cornerRadius: 8))
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel("Filter \(agent.capitalized)")
-                            .accessibilityValue(included ? "Included" : "Excluded")
-                        }
+                ViewThatFits(in: .horizontal) {
+                    HStack(alignment: .center, spacing: 16) {
+                        controls
                         Spacer(minLength: 0)
+                        agentFilter(agents)
+                    }
+                    VStack(alignment: .leading, spacing: 10) {
+                        controls
+                        agentFilter(agents)
+                    }
+                    VStack(alignment: .leading, spacing: 10) {
+                        stackedControls
+                        agentFilter(agents)
                     }
                 }
 
@@ -96,6 +84,8 @@ struct UnifiedUsageHistoryView: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onChange(of: model.usageHistoryGrouping) { selectedPeriod = nil; showAllBreakdown = false }
         .onChange(of: model.usageMetric) { selectedPeriod = nil }
         .onChange(of: model.usageRange) { selectedPeriod = nil }
@@ -103,20 +93,74 @@ struct UnifiedUsageHistoryView: View {
         .onChange(of: model.usageHistoryAgents) { selectedPeriod = nil }
     }
 
+    /// Range, scale, group and metric as one quiet control group.
     private var controls: some View {
+        HStack(spacing: 0) {
+            rangeMenu; controlDivider; scaleMenu; controlDivider; groupMenu; controlDivider; metricMenu
+        }
+        .controlGroupSurface()
+    }
+
+    private var stackedControls: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 0) { rangeMenu; controlDivider; scaleMenu }.controlGroupSurface()
+            HStack(spacing: 0) { groupMenu; controlDivider; metricMenu }.controlGroupSurface()
+        }
+    }
+
+    private var controlDivider: some View {
+        Rectangle().fill(DaddyTheme.line).frame(width: 1, height: 16)
+    }
+
+    private var rangeMenu: some View {
         @Bindable var model = model
-        return LazyVGrid(columns: [GridItem(.adaptive(minimum: 170, maximum: 210), spacing: 7)],
-                         alignment: .leading, spacing: 7) {
-            ContextChoiceMenu(title: "Range", selection: $model.usageRange,
-                              choices: UsageRange.allCases.map { ContextChoice($0, $0.title) }, width: 165)
-            ContextChoiceMenu(title: "Scale", selection: $model.usageScale,
-                              choices: UsageChartScale.allCases.map { ContextChoice($0, $0.rawValue) }, width: 165)
-            ContextChoiceMenu(title: "Group", selection: $model.usageHistoryGrouping,
-                              choices: UsageHistoryGrouping.allCases
-                                .map { ContextChoice($0, $0.rawValue) }, width: 165)
-            ContextChoiceMenu(title: "Metric", selection: $model.usageMetric,
-                              choices: UsageChartMetric.allCases
-                                .map { ContextChoice($0, $0.rawValue) }, width: 165)
+        return QuietChoiceMenu(title: "range", selection: $model.usageRange,
+                               choices: UsageRange.allCases.map { ContextChoice($0, $0.title) })
+    }
+
+    private var scaleMenu: some View {
+        @Bindable var model = model
+        return QuietChoiceMenu(title: "scale", selection: $model.usageScale,
+                               choices: UsageChartScale.allCases.map { ContextChoice($0, $0.rawValue) })
+    }
+
+    private var groupMenu: some View {
+        @Bindable var model = model
+        return QuietChoiceMenu(title: "group", selection: $model.usageHistoryGrouping,
+                               choices: UsageHistoryGrouping.allCases.map { ContextChoice($0, $0.rawValue) })
+    }
+
+    private var metricMenu: some View {
+        @Bindable var model = model
+        return QuietChoiceMenu(title: "metric", selection: $model.usageMetric,
+                               choices: UsageChartMetric.allCases.map { ContextChoice($0, $0.rawValue) })
+    }
+
+    /// Agent filter as a plain toggle row: a filled dot means included.
+    @ViewBuilder private func agentFilter(_ agents: [String]) -> some View {
+        if !agents.isEmpty {
+            HStack(spacing: 14) {
+                ForEach(agents, id: \.self) { agent in
+                    let included = model.usageHistoryAgents.isEmpty || model.usageHistoryAgents.contains(agent)
+                    Button { toggle(agent, among: agents) } label: {
+                        HStack(spacing: 5) {
+                            Circle()
+                                .strokeBorder(included ? DaddyTheme.mint : DaddyTheme.muted.opacity(0.6), lineWidth: 1.5)
+                                .background(Circle().fill(included ? DaddyTheme.mint : .clear))
+                                .frame(width: 8, height: 8)
+                            Text(agent.lowercased())
+                                .foregroundStyle(included ? Color.white : DaddyTheme.muted)
+                        }
+                        .font(.caption.weight(.semibold))
+                        .frame(height: 28)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Filter \(agent.capitalized)")
+                    .accessibilityValue(included ? "Included" : "Excluded")
+                }
+            }
+            .fixedSize()
         }
     }
 
@@ -161,12 +205,12 @@ struct UnifiedUsageHistoryView: View {
                 Text(history.buckets.last?.period ?? "")
             }.font(.caption2.monospaced()).foregroundStyle(DaddyTheme.muted)
             Menu {
-                Button("Entire selected range") { selectedPeriod = nil }
+                Button("entire selected range") { selectedPeriod = nil }
                 ForEach(history.buckets) { bucket in
                     Button(bucket.period) { selectedPeriod = bucket.period }
                 }
             } label: {
-                Text(selectedPeriod ?? "Entire selected range")
+                Text(selectedPeriod ?? "entire selected range")
             }
             .accessibilityLabel("Inspect usage period")
         }.frame(maxWidth: .infinity, alignment: .leading)
@@ -180,7 +224,7 @@ struct UnifiedUsageHistoryView: View {
         let total = selected?.total ?? history.total
         let visibleCount = showAllBreakdown ? rows.count : min(rows.count, 6)
         return VStack(alignment: .leading, spacing: 10) {
-            Text(selected?.period ?? "SELECTED RANGE")
+            Text(selected?.period ?? "selected range")
                 .font(.caption2.weight(.semibold)).foregroundStyle(DaddyTheme.muted)
             Text(format(total)).font(.title2.bold()).monospacedDigit()
             ForEach(0..<visibleCount, id: \.self) { index in
@@ -194,7 +238,7 @@ struct UnifiedUsageHistoryView: View {
                 }.font(.caption2)
             }
             if rows.count > 6 {
-                Button(showAllBreakdown ? "Show fewer" : "Show all \(rows.count) \(model.usageHistoryGrouping.rawValue.lowercased())s") {
+                Button(showAllBreakdown ? "show fewer" : "show all \(rows.count) \(model.usageHistoryGrouping.rawValue.lowercased())s") {
                     showAllBreakdown.toggle()
                 }.font(.caption2)
             }
@@ -218,5 +262,54 @@ struct UnifiedUsageHistoryView: View {
         if value >= 1_000_000 { return String(format: "%.1fM", value / 1_000_000) }
         if value >= 1_000 { return String(format: "%.1fK", value / 1_000) }
         return value.formatted(.number.precision(.fractionLength(0)))
+    }
+}
+
+/// A menu whose label reads inline, e.g. "range last 30 days ⌄", without a box of its own.
+private struct QuietChoiceMenu<Value: Hashable>: View {
+    let title: String
+    @Binding var selection: Value
+    let choices: [ContextChoice<Value>]
+
+    private var selectedTitle: String {
+        choices.first { $0.value == selection }?.title ?? "Choose"
+    }
+
+    var body: some View {
+        Menu {
+            ForEach(choices.indices, id: \.self) { index in
+                let choice = choices[index]
+                Button { selection = choice.value } label: {
+                    if selection == choice.value {
+                        Label(choice.title, systemImage: "checkmark")
+                    } else {
+                        Text(choice.title)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 5) {
+                Text(title).foregroundStyle(DaddyTheme.muted)
+                Text(selectedTitle.lowercased()).fontWeight(.semibold).foregroundStyle(Color.white)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold)).foregroundStyle(DaddyTheme.muted)
+            }
+            .font(.caption).lineLimit(1)
+            .padding(.horizontal, 10).frame(height: 28)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .fixedSize()
+        .accessibilityLabel(title.capitalized)
+        .accessibilityValue(selectedTitle)
+    }
+}
+
+private extension View {
+    func controlGroupSurface() -> some View {
+        padding(2)
+            .background(DaddyTheme.raised, in: RoundedRectangle(cornerRadius: 9))
+            .overlay(RoundedRectangle(cornerRadius: 9).stroke(DaddyTheme.line))
+            .fixedSize()
     }
 }

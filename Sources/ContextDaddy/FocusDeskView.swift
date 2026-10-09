@@ -12,176 +12,179 @@ struct FocusDeskView: View {
     @State private var showSources = false
     @State private var showSelectedService = false
     @State private var showDiagnostics = false
+    /// The visible page size, read from the scroll view itself so content never
+    /// lays out wider than the area that can show it.
+    @State private var pageSize = CGSize(width: 1000, height: 800)
 
     var body: some View {
         @Bindable var model = model
         let dashboard = model.usageDashboard
-        GeometryReader { proxy in
-            let compact = proxy.size.width < 860 || proxy.size.height < 700
-            let narrowFilters = proxy.size.width < 600
-            let serviceMenu = ContextChoiceMenu(
-                title: "Service",
-                selection: $model.usageService,
-                choices: UsageService.allCases.map { ContextChoice($0, $0.menuTitle) },
-                width: narrowFilters ? 300 : compact ? 164 : 186
-            )
-            let modelMenu = ContextChoiceMenu(
-                title: "Model",
-                selection: $model.usageModel,
-                choices: [ContextChoice<String?>(nil, "All observed")] + model.usageModels.map { ContextChoice<String?>($0, $0) },
-                width: narrowFilters ? 300 : compact ? 182 : 216
-            ).disabled(model.usageModels.isEmpty)
-            let rangeMenu = ContextChoiceMenu(
-                title: "Range",
-                selection: $model.usageRange,
-                choices: UsageRange.allCases.map { ContextChoice($0, $0.title) },
-                width: narrowFilters ? 300 : compact ? 132 : 150
-            )
-            ScrollView {
-                VStack(alignment: .leading, spacing: compact ? 15 : 20) {
-                    ScreenHeader(
-                        eyebrow: "Account limits and local history",
-                        title: "Usage",
-                        subtitle: "Codex, Claude and Grok allowances, plus unified local history across agents. Recorded runs and live signals are in Run telemetry.",
-                        art: .telemetry,
-                        hero: !compact,
-                        compact: compact
-                    )
+        let compact = pageSize.width < 860 || pageSize.height < 700
+        let narrowFilters = pageSize.width < 600
+        let serviceMenu = ContextChoiceMenu(
+            title: "Service",
+            selection: $model.usageService,
+            choices: UsageService.allCases.map { ContextChoice($0, $0.menuTitle) },
+            width: narrowFilters ? 300 : compact ? 164 : 186
+        )
+        let modelMenu = ContextChoiceMenu(
+            title: "Model",
+            selection: $model.usageModel,
+            choices: [ContextChoice<String?>(nil, "All observed")] + model.usageModels.map { ContextChoice<String?>($0, $0) },
+            width: narrowFilters ? 300 : compact ? 182 : 216
+        ).disabled(model.usageModels.isEmpty)
+        let rangeMenu = ContextChoiceMenu(
+            title: "Range",
+            selection: $model.usageRange,
+            choices: UsageRange.allCases.map { ContextChoice($0, $0.title) },
+            width: narrowFilters ? 300 : compact ? 132 : 150
+        )
+        ScrollView(.vertical) {
+            VStack(alignment: .leading, spacing: compact ? 22 : 30) {
+                ScreenHeader(
+                    eyebrow: "",
+                    title: "usage",
+                    subtitle: "What's left on your Codex, Claude and Grok accounts, and what your agents used locally. Recorded runs are in Run telemetry.",
+                    art: .telemetry,
+                    hero: !compact,
+                    compact: compact
+                )
 
-                    UsageAllowanceView(stacked: narrowFilters)
-                    UnifiedUsageHistoryView()
+                UsageAllowanceView(stacked: narrowFilters, sideBySide: pageSize.width >= 680)
+                UnifiedUsageHistoryView()
 
-                    Button {
-                        withAnimation(.easeInOut(duration: 0.18)) { showDiagnostics.toggle() }
-                    } label: {
-                        HStack(spacing: 9) {
-                            Image(systemName: "chart.bar.xaxis")
-                            Text(showDiagnostics ? "Hide usage diagnostics" : "Show usage diagnostics")
-                            Spacer()
-                            Image(systemName: showDiagnostics ? "chevron.up" : "chevron.down")
-                        }
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(DaddyTheme.muted)
-                        .frame(minHeight: 40)
-                        .contentShape(Rectangle())
+                Button {
+                    withAnimation(.easeInOut(duration: 0.18)) { showDiagnostics.toggle() }
+                } label: {
+                    HStack(spacing: 9) {
+                        Image(systemName: "chart.bar.xaxis")
+                        Text(showDiagnostics ? "hide usage diagnostics" : "show usage diagnostics")
+                        Spacer()
+                        Image(systemName: showDiagnostics ? "chevron.up" : "chevron.down")
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(showDiagnostics ? "Hide usage diagnostics" : "Show usage diagnostics")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(DaddyTheme.muted)
+                    .frame(minHeight: 40)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(showDiagnostics ? "Hide usage diagnostics" : "Show usage diagnostics")
 
-                    if showDiagnostics {
-                    Panel(padding: 12) {
-                        ViewThatFits(in: .horizontal) {
+                if showDiagnostics {
+                Panel(padding: 12) {
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 8) {
+                            serviceMenu
+                            modelMenu
+                            rangeMenu
+                            Spacer(minLength: 0)
+                        }
+                        VStack(alignment: .leading, spacing: 8) {
+                            serviceMenu
+                            modelMenu
+                            rangeMenu
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                chapter(title: "Selected-service summary", detail: "Local history · \(model.usageService.menuTitle)", icon: "chart.bar.xaxis", expanded: $showSelectedService) {
+                    localHistoryPanel
+                }
+
+                chapter(title: "Model mix", detail: dashboard?.models.isEmpty == false ? "\(dashboard?.models.count ?? 0) observed · local history" : "No observed model data", icon: "cpu", expanded: $showModels) {
+                    if let dashboard, !dashboard.models.isEmpty {
+                        ForEach(dashboard.models) { item in
                             HStack(spacing: 8) {
-                                serviceMenu
-                                modelMenu
-                                rangeMenu
-                                Spacer(minLength: 0)
-                            }
-                            VStack(alignment: .leading, spacing: 8) {
-                                serviceMenu
-                                modelMenu
-                                rangeMenu
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-
-                    chapter(title: "Selected-service summary", detail: "Local history · \(model.usageService.menuTitle)", icon: "chart.bar.xaxis", expanded: $showSelectedService) {
-                        localHistoryPanel
-                    }
-
-                    chapter(title: "Model mix", detail: dashboard?.models.isEmpty == false ? "\(dashboard?.models.count ?? 0) observed · local history" : "No observed model data", icon: "cpu", expanded: $showModels) {
-                        if let dashboard, !dashboard.models.isEmpty {
-                            ForEach(dashboard.models) { item in
-                                HStack(spacing: 8) {
-                                    Text(item.name).font(.subheadline.weight(.medium)).lineLimit(1)
-                                    if item.fallback || !item.priced {
-                                        Text(item.priced ? "FALLBACK" : "UNPRICED")
-                                            .font(.system(size: 9, weight: .bold, design: .rounded))
-                                            .foregroundStyle(DaddyTheme.amber)
-                                    }
-                                    Spacer()
-                                    VStack(alignment: .trailing, spacing: 2) {
-                                        Text(formatTokens(item.generatedTokens))
-                                        Text(item.priced ? "Est. \(item.costUSD.formatted(.currency(code: "USD")))" : "Cost incomplete")
-                                            .foregroundStyle(item.priced ? DaddyTheme.muted : DaddyTheme.amber)
-                                    }
-                                    .font(.caption.monospacedDigit())
+                                Text(item.name).font(.subheadline.weight(.medium)).lineLimit(1)
+                                if item.fallback || !item.priced {
+                                    Text(item.priced ? "FALLBACK" : "UNPRICED")
+                                        .font(.system(size: 9, weight: .bold, design: .rounded))
+                                        .foregroundStyle(DaddyTheme.amber)
                                 }
-                                .padding(.vertical, 3)
-                            }
-                        } else {
-                            emptyLine("No model breakdown is available for this service and range.")
-                        }
-                    }
-
-                    chapter(title: "Projects in session history", detail: dashboard?.projects.isEmpty == false ? "\(dashboard?.projects.count ?? 0) attributed or unattributed projects" : "No session-level attribution", icon: "folder", expanded: $showProjects) {
-                        if let dashboard, !dashboard.projects.isEmpty {
-                            Text("Projects are attributed from sessions, not daily totals; the two views may not reconcile. Costs are estimates and can be incomplete.")
-                                .font(.caption).foregroundStyle(DaddyTheme.amber)
-                            ForEach(showAllProjects ? dashboard.projects : Array(dashboard.projects.prefix(12))) { item in
-                                HStack(spacing: 8) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(item.name).font(.subheadline.weight(.medium)).lineLimit(1)
-                                        Text(UsageProjectIdentity.detail(item.path))
-                                            .font(.caption2).foregroundStyle(DaddyTheme.muted).lineLimit(1)
-                                            .help(UsageProjectIdentity.detail(item.path))
-                                    }
-                                    Spacer()
-                                    VStack(alignment: .trailing, spacing: 2) {
-                                        Text("\(item.sessions) sessions · \(formatTokens(item.generatedTokens))")
-                                        Text("Est. \(item.costUSD.formatted(.currency(code: "USD")))")
-                                    }
-                                    .font(.caption.monospacedDigit()).foregroundStyle(DaddyTheme.muted)
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text(formatTokens(item.generatedTokens))
+                                    Text(item.priced ? "Est. \(item.costUSD.formatted(.currency(code: "USD")))" : "Cost incomplete")
+                                        .foregroundStyle(item.priced ? DaddyTheme.muted : DaddyTheme.amber)
                                 }
-                                .padding(.vertical, 3)
+                                .font(.caption.monospacedDigit())
                             }
-                            if dashboard.projects.count > 12 {
-                                Button(showAllProjects ? "Show fewer projects" : "Show all \(dashboard.projects.count) projects") {
-                                    showAllProjects.toggle()
-                                }
-                            }
-                        } else {
-                            emptyLine("No project attribution is available for this selection.")
+                            .padding(.vertical, 3)
                         }
-                    }
-
-                    chapter(title: "Recent local sessions", detail: dashboard?.sessionCount == 0 ? "No indexed session detail" : "Latest \(dashboard?.recentSessions.count ?? 0) of \(dashboard?.sessionCount ?? 0)", icon: "clock.arrow.circlepath", expanded: $showSessions) {
-                        if let dashboard, !dashboard.recentSessions.isEmpty {
-                            ForEach(dashboard.recentSessions) { session in
-                                HStack(spacing: 8) {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(session.projectName).font(.subheadline.weight(.medium)).lineLimit(1)
-                                        Text(session.lastActivity.map(shortTime) ?? "Time unavailable")
-                                            .font(.caption2).foregroundStyle(DaddyTheme.muted)
-                                    }
-                                    Spacer()
-                                    VStack(alignment: .trailing, spacing: 2) {
-                                        Text(formatTokens(session.generatedTokens))
-                                        Text("Est. \(session.costUSD.formatted(.currency(code: "USD")))")
-                                    }
-                                    .font(.caption.monospacedDigit()).foregroundStyle(DaddyTheme.muted)
-                                }
-                                .padding(.vertical, 3)
-                            }
-                        } else {
-                            emptyLine(model.usageService == .devin
-                                      ? "Devin supplies window counts, not individual session rows in this source."
-                                      : "No indexed sessions are available for this selection.")
-                        }
-                    }
-
-                    chapter(title: "Sources, freshness & limits", detail: "What these numbers can—and cannot—say", icon: "info.circle", expanded: $showSources) {
-                        sourceDetails
-                    }
+                    } else {
+                        emptyLine("No model breakdown is available for this service and range.")
                     }
                 }
-                .padding(compact ? 18 : 28)
-                .frame(maxWidth: 1220, alignment: .topLeading)
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+
+                chapter(title: "Projects in session history", detail: dashboard?.projects.isEmpty == false ? "\(dashboard?.projects.count ?? 0) attributed or unattributed projects" : "No session-level attribution", icon: "folder", expanded: $showProjects) {
+                    if let dashboard, !dashboard.projects.isEmpty {
+                        Text("Projects are attributed from sessions, not daily totals; the two views may not reconcile. Costs are estimates and can be incomplete.")
+                            .font(.caption).foregroundStyle(DaddyTheme.amber)
+                        ForEach(showAllProjects ? dashboard.projects : Array(dashboard.projects.prefix(12))) { item in
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(item.name).font(.subheadline.weight(.medium)).lineLimit(1)
+                                    Text(UsageProjectIdentity.detail(item.path))
+                                        .font(.caption2).foregroundStyle(DaddyTheme.muted).lineLimit(1)
+                                        .help(UsageProjectIdentity.detail(item.path))
+                                }
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text("\(item.sessions) sessions · \(formatTokens(item.generatedTokens))")
+                                    Text("Est. \(item.costUSD.formatted(.currency(code: "USD")))")
+                                }
+                                .font(.caption.monospacedDigit()).foregroundStyle(DaddyTheme.muted)
+                            }
+                            .padding(.vertical, 3)
+                        }
+                        if dashboard.projects.count > 12 {
+                            Button(showAllProjects ? "Show fewer projects" : "Show all \(dashboard.projects.count) projects") {
+                                showAllProjects.toggle()
+                            }
+                        }
+                    } else {
+                        emptyLine("No project attribution is available for this selection.")
+                    }
+                }
+
+                chapter(title: "Recent local sessions", detail: dashboard?.sessionCount == 0 ? "No indexed session detail" : "Latest \(dashboard?.recentSessions.count ?? 0) of \(dashboard?.sessionCount ?? 0)", icon: "clock.arrow.circlepath", expanded: $showSessions) {
+                    if let dashboard, !dashboard.recentSessions.isEmpty {
+                        ForEach(dashboard.recentSessions) { session in
+                            HStack(spacing: 8) {
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(session.projectName).font(.subheadline.weight(.medium)).lineLimit(1)
+                                    Text(session.lastActivity.map(shortTime) ?? "Time unavailable")
+                                        .font(.caption2).foregroundStyle(DaddyTheme.muted)
+                                }
+                                Spacer()
+                                VStack(alignment: .trailing, spacing: 2) {
+                                    Text(formatTokens(session.generatedTokens))
+                                    Text("Est. \(session.costUSD.formatted(.currency(code: "USD")))")
+                                }
+                                .font(.caption.monospacedDigit()).foregroundStyle(DaddyTheme.muted)
+                            }
+                            .padding(.vertical, 3)
+                        }
+                    } else {
+                        emptyLine(model.usageService == .devin
+                                  ? "Devin supplies window counts, not individual session rows in this source."
+                                  : "No indexed sessions are available for this selection.")
+                    }
+                }
+
+                chapter(title: "Sources, freshness & limits", detail: "What these numbers can—and cannot—say", icon: "info.circle", expanded: $showSources) {
+                    sourceDetails
+                }
+                }
             }
-            .frame(width: proxy.size.width, height: proxy.size.height)
+            .padding(compact ? 18 : 28)
+            .frame(maxWidth: 1220, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
+        .scrollBounceBehavior(.basedOnSize, axes: .horizontal)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .onGeometryChange(for: CGSize.self) { $0.size } action: { pageSize = $0 }
     }
 
     private var localHistoryPanel: some View {
