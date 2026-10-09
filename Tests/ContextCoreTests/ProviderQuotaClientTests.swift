@@ -3,6 +3,89 @@ import Testing
 @testable import ContextCore
 
 struct ProviderQuotaClientTests {
+    @Test func grokAuthenticationFailureIsExplicitWithoutReturningProviderDetails() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let executable = directory.appendingPathComponent("grok")
+        let script = #"""
+        #!/bin/sh
+        IFS= read -r line
+        echo '{"jsonrpc":"2.0","id":0,"result":{"protocolVersion":1}}'
+        IFS= read -r line
+        echo '{"jsonrpc":"2.0","id":1,"error":{"code":-32000,"message":"Authentication required","data":"must-not-be-returned"}}'
+        IFS= read -r unexpected
+        """#
+        try script.write(to: executable, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        do {
+            _ = try await ProviderQuotaClient(grokURL: executable).loadQuota(for: .grok)
+            Issue.record("Expected an authentication failure")
+        } catch {
+            #expect(error as? ProviderQuotaError == .authenticationRequired("Grok"))
+            #expect(!error.localizedDescription.contains("must-not-be-returned"))
+        }
+    }
+
+    @Test func grokCollectorOnlyInitializesAndReadsBilling() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let executable = directory.appendingPathComponent("grok")
+        let script = #"""
+        #!/bin/sh
+        [ "$1" = "agent" ] && [ "$2" = "stdio" ] || exit 1
+        IFS= read -r line
+        case "$line" in *'"method":"initialize"'*) ;; *) exit 2 ;; esac
+        echo '{"jsonrpc":"2.0","id":0,"result":{"protocolVersion":1}}'
+        IFS= read -r line
+        case "$line" in *'"method":"_x.ai/billing"'*) ;; *) exit 3 ;; esac
+        echo '{"jsonrpc":"2.0","id":1,"result":{"config":{"creditUsagePercent":40}}}'
+        IFS= read -r unexpected && exit 4
+        """#
+        try script.write(to: executable, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: executable.path)
+        let receipt = try await ProviderQuotaClient(grokURL: executable).loadQuota(for: .grok)
+        #expect(receipt.providers.first?.windows.first?.remainingPercent == 60)
+        #expect(receipt.providers.first?.resetCredits == nil)
+    }
+
+    @Test func grokProjectsAllowanceResetAndSeparatePaidBalances() throws {
+        let status = try ProviderQuotaParser.grok([
+            "subscription_tier": "SuperGrok", "on_demand_enabled": true,
+            "config": ["creditUsagePercent": 25.5,
+                "currentPeriod": ["type": "USAGE_PERIOD_TYPE_WEEKLY", "end": "2026-10-15T00:00:00.000Z"],
+                "prepaidBalance": ["val": "-1250"], "onDemandUsed": ["val": 500],
+                "onDemandCap": ["val": 2000], "isUnifiedBillingUser": true,
+                "accountId": "must-not-be-projected"],
+        ])
+        #expect(status.windows.first?.remainingPercent == 74.5)
+        #expect(status.windows.first?.label == "Weekly window")
+        #expect(status.windows.first?.resetsAtUnix == 1_792_022_400)
+        #expect(status.grokBilling?.prepaidUSD == 12.5)
+        #expect(status.grokBilling?.onDemandUsedUSD == 5)
+        #expect(status.grokBilling?.onDemandCapUSD == 20)
+        #expect(status.grokBilling?.onDemandEnabled == true)
+        #expect(status.grokBilling?.periodEnd == "2026-10-15T00:00:00.000Z")
+        #expect(status.resetCredits == nil)
+        #expect(status.credits == nil)
+        #expect(!String(describing: status).contains("must-not-be-projected"))
+    }
+
+    @Test func grokPreservesMissingZeroAndLegacyAllowance() throws {
+        let zero = try ProviderQuotaParser.grok(["config": ["prepaidBalance": [:]]])
+        #expect(zero.grokBilling?.prepaidUSD == 0)
+        #expect(zero.grokBilling?.onDemandEnabled == nil)
+        #expect(zero.windows.isEmpty)
+        let legacy = try ProviderQuotaParser.grok(["config": ["used": ["val": 250], "monthlyLimit": ["val": 1000]]])
+        #expect(legacy.windows.first?.remainingPercent == 75)
+        #expect(legacy.windows.first?.label == "Usage window")
+        #expect(legacy.windows.first?.resetsAtUnix == nil)
+        #expect(legacy.grokBilling?.prepaidUSD == nil)
+        #expect(throws: ProviderQuotaError.self) { try ProviderQuotaParser.grok(["config": [:]]) }
+        #expect(throws: ProviderQuotaError.self) { try ProviderQuotaParser.grok(["config": ["creditUsagePercent": Double.nan]]) }
+    }
+
     @Test func codexProjectsCreditUnitsWithoutMixingResetGrantsOrSpark() throws {
         let response: [String: Any] = ["result": [
             "rateLimitsByLimitId": [
@@ -74,6 +157,7 @@ struct ProviderQuotaClientTests {
         #expect(status.plan == "pro")
         #expect(status.resetCredits == 2)
         #expect(status.latestReportedResetCreditExpiryUnix == 1_800_000_000)
+        #expect(status.earliestReportedResetCreditExpiryUnix == 1_790_000_000)
         #expect(status.resetCreditDetailsCount == 2)
         #expect(!String(describing: status).contains("not-for-display"))
         #expect(status.windows.map(\.id) == ["codex.primary"])
@@ -88,18 +172,21 @@ struct ProviderQuotaClientTests {
         let absent = try ProviderQuotaParser.codex(response(["availableCount": 2]))
         #expect(absent.resetCreditDetailsCount == nil)
         #expect(absent.latestReportedResetCreditExpiryUnix == nil)
+        #expect(absent.earliestReportedResetCreditExpiryUnix == nil)
 
         let capped = try ProviderQuotaParser.codex(response(["availableCount": 2, "credits": [
             ["status": "available", "expiresAt": 1_790_000_000],
         ]]))
         #expect(capped.resetCreditDetailsCount == 1)
         #expect(capped.latestReportedResetCreditExpiryUnix == 1_790_000_000)
+        #expect(capped.earliestReportedResetCreditExpiryUnix == 1_790_000_000)
 
         let noExpiry = try ProviderQuotaParser.codex(response(["availableCount": 1, "credits": [
             ["status": "available", "expiresAt": NSNull()],
         ]]))
         #expect(noExpiry.resetCreditsWithoutExpiryCount == 1)
         #expect(noExpiry.latestReportedResetCreditExpiryUnix == nil)
+        #expect(noExpiry.earliestReportedResetCreditExpiryUnix == nil)
     }
 
     @Test func claudeRequiresBothWindowsAndParsesCredits() throws {

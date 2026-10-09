@@ -6,6 +6,35 @@ import Testing
 
 @MainActor
 struct UsageAllowanceViewTests {
+    @Test func rendersThreeProviderComparisonAndGrokFailureStates() throws {
+        let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let directory = root.appendingPathComponent("artifacts/design/provider-comparison/after")
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let model = ContextDaddyModel(discover: { _ in throw CancellationError() })
+        let originalAutoCheck = model.autoCheckAllowance
+        defer { model.autoCheckAllowance = originalAutoCheck }
+        model.autoCheckAllowance = false
+        model.show(.overview)
+        let fixture = #"""
+        {"schema_version":"contextdaddy.provider-quota/v1","generated_at":"2026-10-09T12:00:00Z","providers":[
+          {"provider":"codex","status":"ready","source":"Fixture · Codex app-server","checked_at":"2026-10-09T12:00:00Z","plan":"pro","windows":[{"id":"codex.primary","label":"5-hour window","window_duration_minutes":300,"remaining_percent":70,"reset_description":"Today at 5:30pm"},{"id":"codex.secondary","label":"Weekly window","window_duration_minutes":10080,"remaining_percent":60,"reset_description":"Oct 15 at 2:43am"}],"credits":{"balance":12345.67},"reset_credits":2,"earliest_reported_reset_credit_expiry_unix":1793386560,"latest_reported_reset_credit_expiry_unix":1795978560,"reset_credit_details_count":2},
+          {"provider":"claude","status":"ready","source":"Fixture · Claude usage","checked_at":"2026-10-09T12:00:00Z","windows":[{"id":"current","label":"Current window","remaining_percent":80,"reset_description":"Today at 8:30pm"},{"id":"weekly","label":"Weekly window","remaining_percent":60,"reset_description":"Oct 16 at 5:30pm"}],"credits":{"used_amount":25,"limit_amount":150},"claude_reset_grants":{"fullCount":1,"fiveHourCount":2,"checkedAt":"2026-10-09T12:00:00Z","grants":[{"kind":"full","count":1,"expiresAtUnix":1793386560,"paused":false,"usableNow":true},{"kind":"five-hour","count":2,"expiresAtUnix":1795978560,"paused":true,"usableNow":false}]}},
+          {"provider":"grok","status":"ready","source":"Fixture · Grok CLI ACP x.ai/billing","checked_at":"2026-10-09T12:00:00Z","plan":"SuperGrok","windows":[{"id":"grok.allowance","label":"Weekly window","remaining_percent":74.5,"resets_at_unix":1792022400}],"grok_billing":{"prepaidUSD":12.5,"onDemandEnabled":true,"onDemandUsedUSD":5,"onDemandCapUSD":20,"unifiedBilling":true,"periodStart":"2026-10-08T00:00:00Z"}}
+        ]}
+        """#
+        let receipt = try JSONDecoder().decode(ProviderQuotaReceipt.self, from: Data(fixture.utf8))
+        for provider in ["codex", "claude", "grok"] { model.quotaReceipts[provider] = receipt }
+        #expect(UsageAllowanceView.creditText(receipt.providers[2]) == 12.5.formatted(.currency(code: "USD")))
+        #expect(UsageAllowanceView.windowKind(receipt.providers[0].windows[1]) == "weekly")
+        for width in [960, 1180, 1440] {
+            try render(model, width: width, height: 900, to: directory.appendingPathComponent("comparison-\(width).png"))
+        }
+        model.quotaErrors["grok"] = "Fixture: Grok billing could not be read."
+        try render(model, width: 960, height: 900, to: directory.appendingPathComponent("stale-grok-960.png"))
+        model.quotaReceipts.removeValue(forKey: "grok")
+        try render(model, width: 960, height: 900, to: directory.appendingPathComponent("unavailable-grok-960.png"))
+    }
+
     @Test func creditLabelsDistinguishUnitsAndMissingStates() throws {
         func status(_ credits: String, provider: String = "codex") throws -> ProviderQuotaStatus {
             let json = "{\"provider\":\"\(provider)\",\"status\":\"ready\",\"source\":\"fixture\",\"checked_at\":\"2026-10-03T12:00:00Z\",\"windows\":[],\"credits\":\(credits)}"
@@ -85,7 +114,7 @@ struct UsageAllowanceViewTests {
         defer { model.autoCheckAllowance = originalAutoCheck }
         model.autoCheckAllowance = false
         model.show(.overview)
-        let fixture = #"{"schema_version":"contextdaddy.provider-quota/v1","generated_at":"2026-10-03T12:00:00Z","providers":[{"provider":"codex","status":"ready","source":"codex app-server account/rateLimits/read","checked_at":"2026-10-03T12:00:00Z","plan":"pro","windows":[{"id":"codex.primary","label":"5-hour window","remaining_percent":70,"reset_description":"4 Oct at 5:30pm (Asia/Calcutta)"}],"credits":{"balance":12345.6789,"has_credits":true,"unlimited":false},"reset_credits":2,"latest_reported_reset_credit_expiry_unix":1793386560,"reset_credit_details_count":1,"message":null},{"provider":"claude","status":"ready","source":"Claude Code /usage","checked_at":"2026-10-03T12:00:00Z","plan":"Claude Team","windows":[{"id":"current","label":"Current window","remaining_percent":80,"reset_description":"8:30pm (Asia/Calcutta)"},{"id":"weekly","label":"Weekly window","remaining_percent":60,"reset_description":"Oct 4 at 5:29pm (Asia/Calcutta)"}],"credits":{"used_amount":25,"limit_amount":150},"reset_credits":1,"message":null}]}"#
+        let fixture = #"{"schema_version":"contextdaddy.provider-quota/v1","generated_at":"2026-10-03T12:00:00Z","providers":[{"provider":"codex","status":"ready","source":"codex app-server account/rateLimits/read","checked_at":"2026-10-03T12:00:00Z","plan":"pro","windows":[{"id":"codex.primary","label":"5-hour window","remaining_percent":70,"reset_description":"4 Oct at 5:30pm (Asia/Calcutta)"}],"credits":{"balance":12345.6789,"has_credits":true,"unlimited":false},"reset_credits":2,"earliest_reported_reset_credit_expiry_unix":1793386560,"latest_reported_reset_credit_expiry_unix":1793386560,"reset_credit_details_count":1,"message":null},{"provider":"claude","status":"ready","source":"Claude Code /usage","checked_at":"2026-10-03T12:00:00Z","plan":"Claude Team","windows":[{"id":"current","label":"Current window","remaining_percent":80,"reset_description":"8:30pm (Asia/Calcutta)"},{"id":"weekly","label":"Weekly window","remaining_percent":60,"reset_description":"Oct 4 at 5:29pm (Asia/Calcutta)"}],"credits":{"used_amount":25,"limit_amount":150},"reset_credits":1,"message":null}]}"#
         let receipt = try JSONDecoder().decode(ProviderQuotaReceipt.self, from: Data(fixture.utf8))
         model.quotaReceipts["codex"] = receipt
         model.quotaReceipts["claude"] = receipt

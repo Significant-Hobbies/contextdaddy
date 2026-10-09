@@ -29,7 +29,8 @@ public enum UsageService: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .codex: "codex"
         case .claude: "claude"
-        case .grok, .devin, .cursor: nil
+        case .grok: "grok"
+        case .devin, .cursor: nil
         }
     }
 }
@@ -378,6 +379,7 @@ public struct ProviderQuotaStatus: Decodable, Sendable {
     public let windows: [ProviderQuotaWindow]
     public let credits: ProviderCreditBalance?
     public let resetCredits: UInt64?
+    public var earliestReportedResetCreditExpiryUnix: Int64? = nil
     /// Only the expiry dates returned in the optional credit-detail list are known.
     /// The provider may return fewer details than its available count.
     public let latestReportedResetCreditExpiryUnix: Int64?
@@ -385,18 +387,34 @@ public struct ProviderQuotaStatus: Decodable, Sendable {
     public let resetCreditsWithoutExpiryCount: UInt64?
     public var claudeResetGrants: ClaudeResetGrantSummary? = nil
     public var resetGrantError: String? = nil
+    public var grokBilling: GrokBillingSummary? = nil
     public let message: String?
 
     enum CodingKeys: String, CodingKey {
         case provider, status, source, plan, windows, credits, message
         case checkedAt = "checked_at"
         case resetCredits = "reset_credits"
+        case earliestReportedResetCreditExpiryUnix = "earliest_reported_reset_credit_expiry_unix"
         case latestReportedResetCreditExpiryUnix = "latest_reported_reset_credit_expiry_unix"
         case resetCreditDetailsCount = "reset_credit_details_count"
         case resetCreditsWithoutExpiryCount = "reset_credits_without_expiry_count"
         case claudeResetGrants = "claude_reset_grants"
         case resetGrantError = "reset_grant_error"
+        case grokBilling = "grok_billing"
     }
+}
+
+public struct GrokBillingSummary: Decodable, Sendable {
+    public let prepaidUSD: Double?
+    public let onDemandEnabled: Bool?
+    public let onDemandUsedUSD: Double?
+    public let onDemandCapUSD: Double?
+    public let unifiedBilling: Bool?
+    public let periodStart: String?
+    public var periodEnd: String? = nil
+    public var periodType: String? = nil
+    public let includedUsedUSD: Double?
+    public let includedLimitUSD: Double?
 }
 
 public struct ProviderQuotaReceipt: Decodable, Sendable {

@@ -502,14 +502,14 @@ final class ContextDaddyModel {
         }
     }
 
-    /// Only called by the explicit Usage-page button; this may contact both providers.
+    /// Explicit or opted-in Usage-page checks may contact the three providers.
     func refreshAllQuotas() async {
         guard !isQuotaLoading else { return }
         lastAllowanceCheckAttempt = Date()
         UserDefaults.standard.set(lastAllowanceCheckAttempt, forKey: "contextDaddyLastAllowanceCheckAttempt")
         isQuotaLoading = true
         defer { isQuotaLoading = false }
-        for service in [UsageService.codex, .claude] {
+        for service in [UsageService.codex, .claude, .grok] {
             guard let key = service.quotaKey else { continue }
             do {
                 quotaReceipts[key] = try await ProviderQuotaClient().loadQuota(for: service)
