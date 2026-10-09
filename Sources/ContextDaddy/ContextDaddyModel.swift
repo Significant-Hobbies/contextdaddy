@@ -507,9 +507,15 @@ final class ContextDaddyModel {
         guard !isQuotaLoading else { return }
         lastAllowanceCheckAttempt = Date()
         UserDefaults.standard.set(lastAllowanceCheckAttempt, forKey: "contextDaddyLastAllowanceCheckAttempt")
+        await refreshQuotas(for: [.codex, .claude, .grok])
+    }
+
+    /// An explicit check of the named providers only; it does not reset the automatic-check timer.
+    func refreshQuotas(for services: [UsageService]) async {
+        guard !isQuotaLoading else { return }
         isQuotaLoading = true
         defer { isQuotaLoading = false }
-        for service in [UsageService.codex, .claude, .grok] {
+        for service in services {
             guard let key = service.quotaKey else { continue }
             do {
                 quotaReceipts[key] = try await ProviderQuotaClient().loadQuota(for: service)

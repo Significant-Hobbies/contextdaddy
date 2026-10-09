@@ -186,3 +186,16 @@ checks use synthetic discovery and do not qualify a published or installed build
 ## Provider allowance comparison
 
 The owner selected A, Compare providers, on 9 October 2026. Usage has one native comparison table with Codex, Claude and Grok columns. Aligned rows show reported allowance windows, scheduled resets, credit balances, reset grants and source disclosures. Codex leads with the first reported grant expiry and preserves partial-detail uncertainty. Claude retains scoped grants, paused states and the usage-settings fallback. Grok keeps prepaid USD credits and pay-as-you-go balances separate; missing fields remain unreported. Native fixture renders cover 960, 1180 and 1440 points; live Grok retrieval is separately verified or reported unavailable.
+
+## Quiet Usage page (2026-10-09)
+
+The owner called the provider grid "chopped": mostly-empty "Not checked" cells, letter-spaced
+caps eyebrows and four equal-weight pickers competed with the one number that matters. Usage now
+uses lowercase headings and actions with no eyebrows. Each provider with a reading gets one focal
+number (weekly remaining, or the tightest window) with its pace and reset, beside a calm list of the
+other windows, credits, reset grants and pay-as-you-go; source details stay in a disclosure.
+Providers without a reading collapse to one line with a single `check` action. History keeps every
+control as one inline group (range, scale, group, metric) plus a plain agent toggle row. The page
+reads its size from the scroll view itself instead of forcing a GeometryReader frame, the window
+cannot shrink below RootView's 960-point minimum, and `UsageLayoutTests` asserts the scroll
+document never overflows or offsets its visible area (overlay and always-visible scroll bars).
