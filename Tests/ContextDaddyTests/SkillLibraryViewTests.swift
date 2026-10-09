@@ -107,8 +107,12 @@ struct SkillLibraryViewTests {
     }
 
     @Test func rendersLibraryAtSupportedWidthsWithoutLiveData() throws {
-        // AppKit caches this preference per process. Run the suite separately for each style.
-        let scrollbarPreference = ProcessInfo.processInfo.environment["CONTEXTDADDY_TEST_SCROLLBARS"] ?? "Always"
+        // AppKit resolves the scroller style once per process, on the first read, so in a full
+        // run an earlier suite that created an AppKit view has already fixed it. Lay out against
+        // the style AppKit actually resolved. An explicit CONTEXTDADDY_TEST_SCROLLBARS run (use
+        // --filter so this test owns the first read) also requires that style to be the one requested.
+        let requestedPreference = ProcessInfo.processInfo.environment["CONTEXTDADDY_TEST_SCROLLBARS"]
+        let scrollbarPreference = requestedPreference ?? "Always"
         let defaults = UserDefaults.standard
         let previous = defaults.object(forKey: "AppleShowScrollBars")
         defaults.set(scrollbarPreference, forKey: "AppleShowScrollBars")
@@ -116,7 +120,10 @@ struct SkillLibraryViewTests {
             if let previous { defaults.set(previous, forKey: "AppleShowScrollBars") }
             else { defaults.removeObject(forKey: "AppleShowScrollBars") }
         }
-        #expect(NSScroller.preferredScrollerStyle == (scrollbarPreference == "Always" ? .legacy : .overlay))
+        let resolvedStyle = NSScroller.preferredScrollerStyle
+        if let requestedPreference {
+            #expect(resolvedStyle == (requestedPreference == "Always" ? .legacy : .overlay))
+        }
         let model = ContextDaddyModel()
         let records = [
             record("design-workflow", "Design and review Fleet product interfaces.", path: "/Users/demo/skills/design-workflow/SKILL.md", providers: [.codex, .claude]),
@@ -141,6 +148,10 @@ struct SkillLibraryViewTests {
             #expect(scrolls.count == 1)
             #expect(scrolls.first?.hasVerticalScroller == true)
             let scroll = try #require(scrolls.first)
+            // The view reserves scroller width from the resolved style; the hosted scroll view must use it too.
+            #expect(scroll.scrollerStyle == resolvedStyle)
+            let reserved = resolvedStyle == .legacy ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy) : 0
+            #expect(scroll.contentView.bounds.width <= scroll.frame.width - reserved + 1)
             #expect(scroll.frame.height <= hosting.bounds.height + 1)
             #expect(scroll.frame.width <= hosting.bounds.width + 1)
             let document = try #require(scroll.documentView)
