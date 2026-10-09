@@ -71,7 +71,7 @@ The general usage dashboard lives in ContextDaddy's Focus Desk. Devin's distinct
 
 To create the local `.app` after a build, run `python3 scripts/package-contextdaddy.py --ccusage /path/to/ccusage`. The packager verifies the exact 20.0.24 helper, copies it into ContextDaddy's bundle, and selects the newest available release or debug executable so an older build product cannot silently replace the interface. A matching helper already installed in a standard command location is detected automatically; CodeVetter is not searched.
 
-For a public download, use `scripts/release-contextdaddy.py` only after building the release executable. It requires an installed Developer ID Application identity, either an existing notarization Keychain profile or an App Store Connect API key, an explicit ccusage 20.0.24 path, and explicit version, build, and source SHA. It creates a new, isolated signed and notarized DMG with a checksum and receipt; it does not publish anything. The protected GitHub workflow is dispatched manually with a tag at the current `main` commit. It recovers the pinned helper from the checksum-verified prior public DMG, signs and notarizes the new build, deploys the qualified DMG to the app-owned Worker, verifies the live download bytes, and creates the GitHub release. The `production-release` environment holds the signing, notary, and Cloudflare inputs. Ordinary pushes run candidate CI only. Installed-app acceptance remains a separate check. StorageDaddy's separate release tooling does not apply to ContextDaddy.
+For a public download, use `scripts/release-contextdaddy.py` only after building the release executable. It requires an installed Developer ID Application identity, either an existing notarization Keychain profile or an App Store Connect API key, an explicit ccusage 20.0.24 path, and explicit version, build, and source SHA. It creates a new, isolated signed and notarized DMG with a checksum and receipt; it does not publish anything. The protected GitHub workflow is dispatched manually with a tag at the current `main` commit. It recovers the pinned helper from the checksum-verified prior public DMG, signs and notarizes the new build, deploys the qualified DMG to the app-owned Worker, verifies the live download bytes, and creates the GitHub release. The `production-release` environment holds the signing, notary, and Cloudflare inputs. Ordinary pushes run candidate CI only. Installed-app acceptance remains a separate check. App packaging and permissions remain app-owned; shared Daddy tooling validates the release and feed.
 
 ## Architecture
 
@@ -88,4 +88,26 @@ ContextDaddy inspects well-known agent roots and opens at most 64 KiB of each `S
 
 ## Status
 
-ContextDaddy 0.1.0 is a public early-access beta: a signed, notarized and stapled Apple-silicon build for macOS 14 or later, distributed from [context.daddyrad.com](https://context.daddyrad.com/download). There is no automatic updater yet; new builds are manual downloads.
+ContextDaddy 0.1.0 is a public early-access beta: a signed, notarized and stapled Apple-silicon build for macOS 14 or later, distributed from [context.daddyrad.com](https://context.daddyrad.com/download). Builds through 0.2.9 (19) require manual downloads. This source adds the shared Sparkle 2.9.6 updater: automatic checks use the stored preference, installation requires confirmation, and restarts wait for context reads, management writes and open review sheets. Development bundles without feed configuration remain explicitly unavailable.
+
+
+### Shared updater rollout
+
+The native updater, command-menu controls, packaging helper and appcast validator
+come from `saas-maker/tooling/daddy-macos/shared/`. Each app keeps its own feed,
+key and idle rules. `scripts/check-daddy-foundation.py --app contextdaddy` runs
+in candidate and release CI and rejects source, dependency and tooling-pin drift.
+
+ContextDaddy needs its own public key at `Support/SparklePublicKey.txt` and its
+matching protected Sparkle release input. Existing apps' signing keys are not
+reused. Local packaging stays manual unless `--enable-updates` is passed; the
+production release packager requires updater configuration. Publish the reviewed
+shared tooling first, then repin candidate and release callers for all four apps
+to that immutable revision. The ContextDaddy release job fails before signing
+when pinned tooling still describes it as manual.
+
+The first updater-enabled notarized build must be installed manually because
+older builds contain no updater. Qualify its native menu and a subsequent signed
+feed upgrade before calling installed-app auto-update acceptance complete.
+Candidate checks do not install apps or publish releases. Dedicated signing setup,
+Apple qualification, publication and installed-update acceptance are separate gates.

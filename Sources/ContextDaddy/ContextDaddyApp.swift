@@ -5,6 +5,7 @@ import SwiftUI
 struct ContextDaddyApp: App {
     @NSApplicationDelegateAdaptor(ContextDaddyAppDelegate.self) private var appDelegate
     @State private var model = ContextDaddyModel()
+    @StateObject private var updates = AppUpdates()
 
     var body: some Scene {
         Window("ContextDaddy", id: "main") {
@@ -13,10 +14,16 @@ struct ContextDaddyApp: App {
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 960, minHeight: 640)
                 .onAppear { appDelegate.activeWork = { model.activeWorkDescription } }
+                .task { updates.start(model: model) }
         }
         .defaultSize(width: 1180, height: 740)
         .defaultPosition(.center)
         .windowStyle(.titleBar)
+        .commands {
+            CommandGroup(after: .appInfo) {
+                DaddyUpdateMenu(updates: updates)
+            }
+        }
         MenuBarExtra {
             ContextMenu(model: model)
         } label: {

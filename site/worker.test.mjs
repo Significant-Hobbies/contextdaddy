@@ -41,3 +41,19 @@ test('rejects non-read methods', async () => {
   const response = await worker.fetch(new Request('https://context.daddyrad.com/download', { method: 'POST' }), env);
   assert.equal(response.status, 405);
 });
+
+
+test('serves the signed feed and update enclosure directly with security headers', async () => {
+  for (const path of ['/updates/appcast.xml', '/updates/ContextDaddy-0.3.0-20-arm64.dmg']) {
+    const response = await worker.fetch(new Request(`https://context.daddyrad.com${path}`), env);
+    assert.equal(await response.text(), `asset:${path}`);
+    assert.equal(response.headers.get('Referrer-Policy'), 'no-referrer');
+    assert.equal(response.headers.get('X-Content-Type-Options'), 'nosniff');
+  }
+});
+
+test('a missing update asset stays unavailable', async () => {
+  const missing = { ASSETS: { fetch: async () => new Response('missing', { status: 404 }) } };
+  const response = await worker.fetch(new Request('https://context.daddyrad.com/updates/appcast.xml'), missing);
+  assert.equal(response.status, 404);
+});

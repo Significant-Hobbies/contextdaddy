@@ -1,7 +1,6 @@
 // Site worker: owns context.daddyrad.com end to end.
-// /download serves the bundled signed and notarized DMG; every other path is
-// proxied to the ios-landings Pages project. ContextDaddy has no legacy
-// hostnames and no update feed yet, so this worker stays minimal.
+// /download retains the manual bootstrap route. /updates/ serves only bundled
+// signed-feed assets; all other paths proxy the existing landing.
 import release from './release.json' with { type: 'json' };
 
 const PAGES_HOST = 'contextdaddy-landing.pages.dev';
@@ -33,6 +32,9 @@ export default {
         result.headers.set('Cache-Control', 'private, no-store');
       }
       return result;
+    }
+    if (url.pathname.startsWith('/updates/')) {
+      return secure(await env.ASSETS.fetch(request));
     }
     const origin = new URL(request.url);
     origin.host = PAGES_HOST;

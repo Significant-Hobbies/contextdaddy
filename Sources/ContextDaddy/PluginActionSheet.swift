@@ -71,7 +71,7 @@ struct PluginActionSheet: View {
         busy = true; failure = nil
         defer { busy = false }
         do {
-            let receipt = try await manager.apply(plan.id)
+            let receipt = try await ContextUpdateActivity.perform { try await manager.apply(plan.id) }
             let directory = URL(fileURLWithPath: plan.workingDirectory)
             let after = try await Task.detached { try PluginInventory.scan(folder: directory) }.value
             let current = after.entries.first { $0.id == entry.id }

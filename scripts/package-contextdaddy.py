@@ -4,12 +4,14 @@ from pathlib import Path
 import plistlib
 import shutil
 import subprocess
+import sparkle_support
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
 parser.add_argument("binary", nargs="?", type=Path)
 parser.add_argument("--ccusage", type=Path, help="Pinned ccusage 20.0.24 executable to bundle")
 parser.add_argument("--output", type=Path, default=root / "artifacts/ContextDaddy.app")
+parser.add_argument("--enable-updates", action="store_true", help="Require the dedicated Sparkle feed public key")
 parser.add_argument("--unsigned", action="store_true", help="Leave signing to the distribution packager")
 parser.add_argument("--version", default="0.1.0", help="Package version")
 parser.add_argument("--build", type=int, default=1, help="Package build number")
@@ -48,6 +50,8 @@ if version.stdout.strip() != "ccusage 20.0.24":
 if not (root / "CONTEXTDADDY_NOTICES.md").is_file():
     raise SystemExit("Missing ccusage attribution and MIT notice.")
 
+# Manual distribution remains available until the dedicated feed key is configured.
+update_configuration = sparkle_support.configuration() if args.enable_updates else {}
 bundle = args.output
 contents = bundle / "Contents"
 executable = contents / "MacOS/ContextDaddy"
@@ -77,6 +81,8 @@ if ccusage.resolve() != (helpers / "ccusage").resolve():
 (helpers / "ccusage").chmod(0o755)
 shutil.copy2(root / "CONTEXTDADDY_NOTICES.md", resources / "CONTEXTDADDY_NOTICES.md")
 
+sparkle_support.embed(bundle)
+
 with contents.joinpath("Info.plist").open("wb") as handle:
     plistlib.dump({
         "CFBundleExecutable": "ContextDaddy",
@@ -91,9 +97,11 @@ with contents.joinpath("Info.plist").open("wb") as handle:
         "LSMinimumSystemVersion": "14.0",
         "NSHighResolutionCapable": True,
         "NSPrincipalClass": "NSApplication",
+        **update_configuration,
     }, handle)
 
 if not args.unsigned:
+    sparkle_support.sign(bundle, "-", timestamp=False)
     subprocess.run(["/usr/bin/codesign", "--force", "--sign", "-", str(bundle)], check=True)
     registration = subprocess.run([
         "/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister",
