@@ -49,7 +49,7 @@ struct RootView: View {
                     HStack(spacing: 10) {
                         Image(systemName: "tray.full").frame(width: 18)
                         VStack(alignment: .leading, spacing: 3) {
-                            Text("Diagnostics")
+                            Text("diagnostics")
                                 .lineLimit(1)
                                 .minimumScaleFactor(0.9)
                             if !model.configurationHealth.issues.isEmpty {
@@ -70,11 +70,11 @@ struct RootView: View {
                 .buttonStyle(.plain)
                 .accessibilityAddTraits(model.evidenceOpen ? .isSelected : [])
                 .accessibilityLabel(model.configurationHealth.issues.isEmpty
-                    ? "Diagnostics"
-                    : "Diagnostics, \(model.configurationHealth.issues.count) configuration \(model.configurationHealth.issues.count == 1 ? "issue" : "issues")")
+                    ? "diagnostics"
+                    : "diagnostics, \(model.configurationHealth.issues.count) configuration \(model.configurationHealth.issues.count == 1 ? "issue" : "issues")")
                 .help("Discovered files and read-only configuration diagnostics")
                 .padding(.horizontal, 10)
-                Button("Project files & instructions") { model.show(.projects) }
+                Button("project files & instructions") { model.show(.projects) }
                     .font(.caption).buttonStyle(.plain).foregroundStyle(DaddyTheme.muted)
                     .padding(.horizontal, 20).padding(.top, 12)
                 Spacer(minLength: 8)
@@ -129,9 +129,8 @@ private struct BrandMark: View {
                     .minimumScaleFactor(0.8)
                     .fixedSize(horizontal: true, vertical: false)
                     .layoutPriority(2)
-                Text("AGENT CONTEXT, EXPLAINED")
+                Text("agent context, explained")
                     .font(.system(size: 7, weight: .bold, design: .rounded))
-                    .tracking(0.5)
                     .foregroundStyle(DaddyTheme.muted)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
