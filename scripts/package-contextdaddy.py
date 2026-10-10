@@ -34,6 +34,13 @@ if args.binary is None:
 if not args.binary.is_file():
     raise SystemExit(f"Build ContextDaddy first: {args.binary}")
 
+# SwiftPM's Bundle.module accessor requires its font bundle in packaged apps.
+# Resolve it beside the selected binary, never from a different configuration.
+ui_bundle = args.binary.parent / "SaaSMakerUI_SaaSMakerUI.bundle"
+if not ui_bundle.is_dir():
+    raise SystemExit(f"Missing required SaaSMakerUI font resource bundle: {ui_bundle}. "
+                     "Build ContextDaddy with SwiftPM before packaging.")
+
 # Validate helper and attribution before mutating an existing app bundle.
 ccusage_candidates = ([args.ccusage] if args.ccusage else []) + [
     root / "artifacts/ContextDaddy.app/Contents/Helpers/ccusage",
@@ -58,6 +65,7 @@ executable = contents / "MacOS/ContextDaddy"
 contents.joinpath("MacOS").mkdir(parents=True, exist_ok=True)
 resources = contents / "Resources"
 resources.mkdir(parents=True, exist_ok=True)
+shutil.copytree(ui_bundle, resources / ui_bundle.name, dirs_exist_ok=True)
 pending = executable.with_suffix(".pending")
 shutil.copy2(args.binary, pending)
 pending.chmod(0o755)

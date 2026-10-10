@@ -1,6 +1,7 @@
 import AppKit
 import ContextCore
 import SwiftUI
+import SaaSMakerUI
 
 struct MemoryLibraryView: View {
     @Environment(ContextDaddyModel.self) private var model
@@ -84,25 +85,25 @@ struct MemoryLibraryView: View {
     }
     private var titles: some View {
         VStack(alignment: .leading, spacing: 5) {
-            Text("Memory").font(.title2.bold())
+            SMSectionHeader("memory", size: 22).accessibilityLabel("Memory")
             Text("See what agents can remember. Keep the useful context.").font(.callout).foregroundStyle(DaddyTheme.muted)
         }
     }
     private var actions: some View {
-        HStack { Button("History") { historyOpen = true }; Button("Recheck", action: recheck).disabled(loading || model.isLoading) }
+        HStack { Button("history") { historyOpen = true }.accessibilityLabel("History"); Button("recheck", action: recheck).accessibilityLabel("Recheck").disabled(loading || model.isLoading) }
     }
     private var folderControls: some View {
         VStack(alignment: .leading, spacing: 8) {
             TextField("Folder path · leave empty for discovered projects", text: $folderInput).textFieldStyle(.roundedBorder)
                 .onSubmit { folder = (folderInput as NSString).expandingTildeInPath }
             HStack {
-                Button("Inspect folder") { folder = (folderInput as NSString).expandingTildeInPath }
+                Button("inspect folder") { folder = (folderInput as NSString).expandingTildeInPath }.accessibilityLabel("Inspect folder")
                 Menu("Choose folder") {
-                    Button("Browse…") {
+                    Button("browse…") {
                         let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
                         if panel.runModal() == .OK, let url = panel.url { folder = url.path }
-                    }
-                    Button("All discovered projects") { folder = "" }
+                    }.accessibilityLabel("Browse…")
+                    Button("all discovered projects") { folder = "" }.accessibilityLabel("All discovered projects")
                     ForEach(Array(model.projects.prefix(20))) { project in Button(project.name) { folder = project.path } }
                 }
             }
@@ -150,7 +151,7 @@ struct MemoryLibraryView: View {
                     }.buttonStyle(.plain)
                     Divider()
                 }
-                HStack { Button("Previous") { page -= 1; selected = nil }.disabled(page == 0); Spacer(); Text("\(page + 1) / \(max(1, (matches.count + 7) / 8))").font(.caption); Spacer(); Button("Next") { page += 1; selected = nil }.disabled((page + 1) * 8 >= matches.count) }
+                HStack { Button("previous") { page -= 1; selected = nil }.accessibilityLabel("Previous").disabled(page == 0); Spacer(); Text("\(page + 1) / \(max(1, (matches.count + 7) / 8))").font(.caption); Spacer(); Button("next") { page += 1; selected = nil }.accessibilityLabel("Next").disabled((page + 1) * 8 >= matches.count) }
             }
         }
     }
@@ -164,10 +165,10 @@ struct MemoryLibraryView: View {
                 Text(entry.access).font(.callout).foregroundStyle(DaddyTheme.muted)
                 if entry.name.hasPrefix("AGENTS") { Text("Shown under the Codex instruction adapter. Other agents may also support this format; their loading policy is not established by this file alone.").font(.caption).foregroundStyle(DaddyTheme.amber) }
                 Text("Updated \(entry.modified.formatted(date: .abbreviated, time: .shortened)) · not last use").font(.caption).foregroundStyle(DaddyTheme.muted)
-                Button("Open document…") { editing = entry }
-                Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: entry.path)]) }
+                Button("open document…") { editing = entry }.accessibilityLabel("Open document…")
+                Button("reveal in finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: entry.path)]) }.accessibilityLabel("Reveal in Finder")
                 if let group = duplicateGroups.first(where: { $0.contains(where: { $0.id == entry.id }) }) {
-                    Text("Identical contents also at").font(.headline)
+                    SMDisplay("identical contents also at", size: 13).accessibilityLabel("Identical contents also at")
                     ForEach(group.filter { $0.id != entry.id }) { copy in
                         Button(shortPath(copy.path)) { selected = copy }.font(.caption).multilineTextAlignment(.leading)
                     }
@@ -245,14 +246,14 @@ private struct MemoryEditorSheet: View {
                 Text(entry.editable && !truncated ? "Remove stale or repeated guidance. Save requires a preview; History can restore the previous document." : "Read-only source. Manage this file through its owning agent.").font(.caption).foregroundStyle(DaddyTheme.muted)
             } else { ProgressView("Opening document…").frame(maxHeight: .infinity) }
             HStack {
-                Button("Close") { dismiss() }.keyboardShortcut(.cancelAction).disabled(busy)
+                Button("close") { dismiss() }.accessibilityLabel("Close").keyboardShortcut(.cancelAction).disabled(busy)
                 Spacer()
                 if plan != nil {
-                    Button("Back to editing") { plan = nil }.disabled(busy)
+                    Button("back to editing") { plan = nil }.accessibilityLabel("Back to editing").disabled(busy)
                     Button(plan?.archive == true ? "Apply archive" : "Apply edit") { Task { busy = true; defer { busy = false }; do { _ = try await ContextUpdateActivity.perform { try await manager.apply(plan!.id) }; changed(); dismiss() } catch { failure = error.localizedDescription; plan = nil } } }.disabled(busy)
                 } else {
-                    Button("Preview archive") { Task { do { plan = try await manager.prepareArchive(entry: entry); failure = nil } catch { failure = error.localizedDescription } } }.disabled(!loaded || !entry.editable || truncated || text != original)
-                    Button("Preview changes") { Task { do { plan = try await manager.prepare(entry: entry, text: text); failure = nil } catch { failure = error.localizedDescription } } }.disabled(!loaded || !entry.editable || truncated || text == original)
+                    Button("preview archive") { Task { do { plan = try await manager.prepareArchive(entry: entry); failure = nil } catch { failure = error.localizedDescription } } }.accessibilityLabel("Preview archive").disabled(!loaded || !entry.editable || truncated || text != original)
+                    Button("preview changes") { Task { do { plan = try await manager.prepare(entry: entry, text: text); failure = nil } catch { failure = error.localizedDescription } } }.accessibilityLabel("Preview changes").disabled(!loaded || !entry.editable || truncated || text == original)
                 }
             }
         }.padding(24).frame(width: 680, height: 640)
@@ -281,19 +282,19 @@ private struct MemoryHistorySheet: View {
                     ForEach(receipts) { receipt in
                         Text(receipt.path).font(.caption.monospaced()).textSelection(.enabled)
                         Text("\(receipt.date.formatted()) · \(receipt.restored ? "Restored" : receipt.completed ? (receipt.archived == true ? "Archived" : "Applied") : "Interrupted · inspect recovery")").font(.caption)
-                        if !receipt.restored { Button("Restore previous document") { restoring = receipt.id }.disabled(restoring != nil) }
+                        if !receipt.restored { Button("restore previous document") { restoring = receipt.id }.accessibilityLabel("Restore previous document").disabled(restoring != nil) }
                         Divider()
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
-            Button("Done") { dismiss() }.keyboardShortcut(.cancelAction)
+            Button("done") { dismiss() }.accessibilityLabel("Done").keyboardShortcut(.cancelAction)
         }.padding(24).frame(width: 620, height: 520)
         .task { await reload() }
         .confirmationDialog("Restore the previous document?", isPresented: Binding(get: { restoring != nil }, set: { if !$0 { restoring = nil } })) {
             if let id = restoring {
-                Button("Restore") { restoring = nil; Task { do { try await ContextUpdateActivity.perform { try await manager.restore(id) }; changed(); await reload() } catch { failure = error.localizedDescription } } }
+                Button("restore") { restoring = nil; Task { do { try await ContextUpdateActivity.perform { try await manager.restore(id) }; changed(); await reload() } catch { failure = error.localizedDescription } } }.accessibilityLabel("Restore")
             }
-            Button("Cancel", role: .cancel) { restoring = nil }
+            Button("cancel", role: .cancel) { restoring = nil }.accessibilityLabel("Cancel")
         }
     }
     private func reload() async { do { receipts = try await manager.history() } catch { failure = error.localizedDescription } }

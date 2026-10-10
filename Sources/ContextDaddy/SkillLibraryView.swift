@@ -1,6 +1,7 @@
 import AppKit
 import ContextCore
 import SwiftUI
+import SaaSMakerUI
 
 private enum SkillActivityFilter: String, CaseIterable {
     case all = "All activity"
@@ -250,14 +251,14 @@ struct SkillLibraryView: View {
         .sheet(isPresented: $showLocations) { locationsSheet }
         .sheet(isPresented: $showHistory) { SkillCleanupHistorySheet(manager: manager, completed: { await refreshLibrary() }) }
         .confirmationDialog("Restore this change? Newer edits are protected; the current version is retained in recovery storage.", isPresented: Binding(get: { restoreReceipt != nil }, set: { if !$0 { restoreReceipt = nil } })) {
-            Button("Restore change") {
+            Button("restore change") {
                 guard let receipt = restoreReceipt else { return }
                 restoreReceipt = nil
                 Task {
                     do { try await manager.restore(receipt.id); receipts = try await manager.history(); await refreshLibrary(); notice = "Change restored." }
                     catch { self.error = error.localizedDescription }
                 }
-            }
+            }.accessibilityLabel("Restore change")
         }
     }
 
@@ -293,7 +294,7 @@ struct SkillLibraryView: View {
                     Text("YOUR FIRST SKILL · \(guideStep + 1) OF 3")
                         .font(.caption2.weight(.bold)).foregroundStyle(DaddyTheme.mint)
                     Spacer()
-                    Button("Skip") { guideCompleted = true; guideOpen = false }
+                    Button("skip") { guideCompleted = true; guideOpen = false }.accessibilityLabel("Skip")
                         .font(.caption).accessibilityLabel("Dismiss skill guide")
                 }
                 Text(["Find something you use", "See who can use it", "Know what you can change"][guideStep])
@@ -304,24 +305,24 @@ struct SkillLibraryView: View {
                     "Local skills can be edited or shared after a preview. Linked locations use the same definition. Plugin-managed skills are changed through their installer. History keeps recovery records for changes made here."
                 ][guideStep]).font(.callout).foregroundStyle(DaddyTheme.muted).fixedSize(horizontal: false, vertical: true)
                 if guideStep == 0 {
-                    Button("Find a skill") {
+                    Button("find a skill") {
                         searchFocused = true
                         scroll.scrollTo("skill-search", anchor: .top)
-                    }
+                    }.accessibilityLabel("Find a skill")
                 } else if guideStep == 1 {
-                    Button("Show agent access") {
+                    Button("show agent access") {
                         tab = "Access"
                         scroll.scrollTo(selection?.id, anchor: .top)
-                    }.disabled(selection == nil)
+                    }.accessibilityLabel("Show agent access").disabled(selection == nil)
                 } else {
-                    Button("Explore this skill") {
+                    Button("explore this skill") {
                         tab = "Overview"
                         guideCompleted = true; guideOpen = false
                         scroll.scrollTo(selection?.id, anchor: .top)
-                    }.disabled(selection == nil)
+                    }.accessibilityLabel("Explore this skill").disabled(selection == nil)
                 }
                 HStack {
-                    if guideStep > 0 { Button("Back") { guideStep -= 1 } }
+                    if guideStep > 0 { Button("back") { guideStep -= 1 }.accessibilityLabel("Back") }
                     Spacer()
                     Button(guideStep == 2 ? "Finish guide" : "Next") {
                         if guideStep == 2 { guideCompleted = true; guideOpen = false }
@@ -339,12 +340,12 @@ struct SkillLibraryView: View {
     private var header: some View {
         ViewThatFits(in: .horizontal) {
             HStack {
-                Text("Skills").font(.title2.bold())
+                SMDisplay("skills", size: 22).accessibilityLabel("Skills")
                 Spacer()
                 simpleActions
             }
             VStack(alignment: .leading, spacing: 10) {
-                Text("Skills").font(.title2.bold())
+                SMDisplay("skills", size: 22).accessibilityLabel("Skills")
                 simpleActions
             }
         }
@@ -352,16 +353,16 @@ struct SkillLibraryView: View {
 
     private var simpleActions: some View {
         HStack {
-            Button("Clean up duplicates") { openOrganization(.cleanup) }
+            Button("clean up duplicates") { openOrganization(.cleanup) }.accessibilityLabel("Clean up duplicates")
             Menu("More") {
-                Button("Manage plugins…") { model.skillsMode = .plugins }
-                Button("Create skill…") { showCreate = true }
-                Button("Import skill…") { importFolder() }
-                Button("Search locations…") { showLocations = true }
-                Button("Review overlap and scope…") { model.skillsMode = .cleanup }
-                Button("History & undo…") { Task { do { receipts = try await manager.history(); showHistory = true } catch { self.error = error.localizedDescription } } }
-                Button("Refresh") { Task { await refreshLibrary() } }
-                Button("Help") { guideOpen = true; guideStep = 0 }
+                Button("manage plugins…") { model.skillsMode = .plugins }.accessibilityLabel("Manage plugins…")
+                Button("create skill…") { showCreate = true }.accessibilityLabel("Create skill…")
+                Button("import skill…") { importFolder() }.accessibilityLabel("Import skill…")
+                Button("search locations…") { showLocations = true }.accessibilityLabel("Search locations…")
+                Button("review overlap and scope…") { model.skillsMode = .cleanup }.accessibilityLabel("Review overlap and scope…")
+                Button("history & undo…") { Task { do { receipts = try await manager.history(); showHistory = true } catch { self.error = error.localizedDescription } } }.accessibilityLabel("History & undo…")
+                Button("refresh") { Task { await refreshLibrary() } }.accessibilityLabel("Refresh")
+                Button("help") { guideOpen = true; guideStep = 0 }.accessibilityLabel("Help")
             }
         }.disabled(working || folderLoading)
     }
@@ -375,10 +376,10 @@ struct SkillLibraryView: View {
 
     private var folderMenu: some View {
         Menu("Folder") {
-            Button("All folders") { workingFolder = "" }
-            Button("Choose folder…") {
+            Button("all folders") { workingFolder = "" }.accessibilityLabel("All folders")
+            Button("choose folder…") {
                 if let folder = chooseFolder("Choose where you work") { workingFolder = folder.path }
-            }
+            }.accessibilityLabel("Choose folder…")
             ForEach(Array(model.projects.prefix(20))) { project in
                 Button(project.name + " · " + project.path) { workingFolder = project.path }
             }
@@ -393,16 +394,16 @@ struct SkillLibraryView: View {
     }
     private var addSkillMenu: some View {
             Menu {
-                Button("Create skill…") { showCreate = true }
-                Button("Import local skill folder…") { importFolder() }
-                Button("Add search location…") { addLocation() }
+                Button("create skill…") { showCreate = true }.accessibilityLabel("Create skill…")
+                Button("import local skill folder…") { importFolder() }.accessibilityLabel("Import local skill folder…")
+                Button("add search location…") { addLocation() }.accessibilityLabel("Add search location…")
             } label: { Label("Add skill", systemImage: "plus") }
             .menuStyle(.borderlessButton).fixedSize().padding(9).background(DaddyTheme.mint.opacity(0.15), in: RoundedRectangle(cornerRadius: 8))
     }
     @ViewBuilder private var libraryActions: some View {
-            Button("Guide") { guideOpen = true; guideStep = 0 }.fixedSize()
-            Button("Locations") { showLocations = true }.fixedSize()
-            Button("History") { Task { do { receipts = try await manager.history(); showHistory = true } catch { self.error = error.localizedDescription } } }
+            Button("guide") { guideOpen = true; guideStep = 0 }.accessibilityLabel("Guide").fixedSize()
+            Button("locations") { showLocations = true }.accessibilityLabel("Locations").fixedSize()
+            Button("history") { Task { do { receipts = try await manager.history(); showHistory = true } catch { self.error = error.localizedDescription } } }.accessibilityLabel("History")
     }
     private var navigation: some View {
         HStack {
@@ -456,7 +457,7 @@ struct SkillLibraryView: View {
         return Panel(padding: 14) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Skill sources").font(.headline)
+                    SMDisplay("skill sources", size: 13).accessibilityLabel("Skill sources")
                     Spacer()
                     Button(sourceAuditLoading ? "Checking…" : "Audit sources") { auditSources() }
                         .disabled(sourceAuditLoading || local.isEmpty)
@@ -518,7 +519,7 @@ struct SkillLibraryView: View {
         Panel(padding: 14) {
             VStack(alignment: .leading, spacing: 8) {
                 HStack {
-                    Text("Recorded skill activity").font(.headline)
+                    SMDisplay("recorded skill activity", size: 13).accessibilityLabel("Recorded skill activity")
                     Spacer()
                     Button(model.isSkillActivityLoading ? "Reading history…" : model.skillActivity == nil ? "Read local history" : "Refresh history") {
                         Task { await model.refreshSkillActivity() }
@@ -582,9 +583,9 @@ struct SkillLibraryView: View {
                 }.font(.caption)
             }
         } else {
-            Button("Back to local skills") {
+            Button("back to local skills") {
                 ownership = .local; mapSkillIDs = nil; mapLocation = nil; query = ""; resetPage()
-            }.font(.caption)
+            }.accessibilityLabel("Back to local skills").font(.caption)
             Text("Installer-owned files are inspected here; their installer controls changes.").font(.caption).foregroundStyle(DaddyTheme.muted)
         }
     }
@@ -614,19 +615,19 @@ struct SkillLibraryView: View {
         VStack(alignment: .leading, spacing: 10) {
             if let mapLocation {
                 Text("Sources from: " + (mapLocation as NSString).abbreviatingWithTildeInPath).font(.caption.monospaced())
-                Button("Show all locations") { mapSkillIDs = nil; self.mapLocation = nil; resetPage() }
+                Button("show all locations") { mapSkillIDs = nil; self.mapLocation = nil; resetPage() }.accessibilityLabel("Show all locations")
             }
             HStack {
                 TextField("Search skills", text: $query).textFieldStyle(.roundedBorder)
                     .accessibilityLabel("Search skill library").focused($searchFocused).id("skill-search")
-                if !query.isEmpty { Button("Clear") { query = "" } }
+                if !query.isEmpty { Button("clear") { query = "" }.accessibilityLabel("Clear") }
             }
             DisclosureGroup("Filters", isExpanded: $filtersOpen) {
                 VStack(alignment: .leading, spacing: 8) {
                     filterMenus
                     organizationFilters
                     favoritesButton
-                    Button("Reset filters") { mapSkillIDs = nil; mapLocation = nil; ownership = nil; agent = nil; location = nil; scopeFilter = nil; invocationFilter = nil; favoriteOnly = false; unresolvedSourcesOnly = false }
+                    Button("reset filters") { mapSkillIDs = nil; mapLocation = nil; ownership = nil; agent = nil; location = nil; scopeFilter = nil; invocationFilter = nil; favoriteOnly = false; unresolvedSourcesOnly = false }.accessibilityLabel("Reset filters")
                 }.font(.caption)
             }
         }
@@ -651,7 +652,7 @@ struct SkillLibraryView: View {
     }
     private var locationPicker: some View {
             Menu {
-                Button("All locations") { location = nil }
+                Button("all locations") { location = nil }.accessibilityLabel("All locations")
                 ForEach(Array(Set(records.flatMap { $0.exposures.map(\.source) })).sorted(), id: \.self) { source in
                     Button(source) { location = source }
                 }
@@ -684,8 +685,8 @@ struct SkillLibraryView: View {
                 HStack {
                     Text("\(results.count) matching definitions").font(.caption).foregroundStyle(DaddyTheme.muted)
                     Spacer()
-                    Button("Select page") { checked.formUnion(visible.map(\.id)) }
-                    Button("Clear") { checked.removeAll() }.disabled(checked.isEmpty)
+                    Button("select page") { checked.formUnion(visible.map(\.id)) }.accessibilityLabel("Select page")
+                    Button("clear") { checked.removeAll() }.accessibilityLabel("Clear").disabled(checked.isEmpty)
                 }.padding(.bottom, 12)
                 if wide {
                     HStack {
@@ -742,11 +743,11 @@ struct SkillLibraryView: View {
                     Divider()
                 }
                 HStack {
-                    Button("Previous") { page = max(0, page - 1) }.disabled(page == 0)
+                    Button("previous") { page = max(0, page - 1) }.accessibilityLabel("Previous").disabled(page == 0)
                     Spacer()
                     Text("\(min(page, pageCount - 1) + 1) / \(pageCount)").font(.caption.monospacedDigit())
                     Spacer()
-                    Button("Next") { page += 1 }.disabled(page >= pageCount - 1)
+                    Button("next") { page += 1 }.accessibilityLabel("Next").disabled(page >= pageCount - 1)
                 }.buttonStyle(ContextDaddyButtonStyle()).padding(.top, 12)
                 Text("Copies compare instructions only. Cleanup checks the complete folder. Agent access is discovered evidence, not proof of live use.")
                     .font(.caption2).foregroundStyle(DaddyTheme.muted).padding(.top, 10)
@@ -787,7 +788,7 @@ struct SkillLibraryView: View {
                 HStack {
                     Text("\(checked.count) selected").font(.headline)
                     Spacer()
-                    if !checked.isEmpty { Button("Clear selection") { checked.removeAll() } }
+                    if !checked.isEmpty { Button("clear selection") { checked.removeAll() }.accessibilityLabel("Clear selection") }
                 }
                 Text("Selection includes rows on other pages or hidden by filters. Every change is previewed and recorded in History.")
                     .font(.caption).foregroundStyle(DaddyTheme.muted)
@@ -799,16 +800,16 @@ struct SkillLibraryView: View {
         }
     }
     @ViewBuilder private var bulkButtons: some View {
-        Button("Move to folder…") { openOrganization(.move) }.disabled(checked.isEmpty)
-        Button("Share with agents…") { openOrganization(.share) }.disabled(checked.isEmpty)
-        Button("Set invocation…") { openOrganization(.invocation) }.disabled(checked.isEmpty)
+        Button("move to folder…") { openOrganization(.move) }.accessibilityLabel("Move to folder…").disabled(checked.isEmpty)
+        Button("share with agents…") { openOrganization(.share) }.accessibilityLabel("Share with agents…").disabled(checked.isEmpty)
+        Button("set invocation…") { openOrganization(.invocation) }.accessibilityLabel("Set invocation…").disabled(checked.isEmpty)
         Button(checked.isEmpty ? "Review all duplicates…" : "Compare selected copies…") { openOrganization(.cleanup) }
     }
     private func inspector(_ skill: SkillRecord, scroll: ScrollViewProxy) -> some View {
         Panel {
             VStack(alignment: .leading, spacing: 16) {
                 if showsGuide {
-                    Button("Back to guide") { scroll.scrollTo("skill-guide", anchor: .top) }
+                    Button("back to guide") { scroll.scrollTo("skill-guide", anchor: .top) }.accessibilityLabel("Back to guide")
                         .font(.caption)
                 }
                 HStack(alignment: .top) {
@@ -862,7 +863,7 @@ struct SkillLibraryView: View {
                      : "We found this file, but no supported agent route to it. It may be a stored source, an old copy, or a location discovery does not understand. This does not prove it is unused.")
                     .font(.callout).foregroundStyle(DaddyTheme.amber)
                 if skill.ownership == .local {
-                    Button("Make available to an agent…") { share(skill) }
+                    Button("make available to an agent…") { share(skill) }.accessibilityLabel("Make available to an agent…")
                 }
             }
             Text("Physical definition").font(.caption).foregroundStyle(DaddyTheme.muted)
@@ -873,7 +874,7 @@ struct SkillLibraryView: View {
             })).textFieldStyle(.roundedBorder)
             Text("Tags and favorites stay in ContextDaddy.").font(.caption2).foregroundStyle(DaddyTheme.muted)
             Divider()
-            Text("Where this skill appears").font(.headline)
+            SMDisplay("where this skill appears", size: 13).accessibilityLabel("Where this skill appears")
             ForEach(skill.exposures) { exposure in
                 VStack(alignment: .leading, spacing: 5) {
                     Text("\(exposure.provider.rawValue) · \(exposure.scope.rawValue) · \(exposure.applicability.rawValue)").font(.caption.weight(.semibold))
@@ -882,7 +883,7 @@ struct SkillLibraryView: View {
                 }
             }
             if skill.hasDefinitionConflict {
-                Button("Compare copies") { checked = Set(records.filter { $0.name == skill.name || (skill.contentFingerprint != nil && $0.contentFingerprint == skill.contentFingerprint) }.map(\.id)); openOrganization(.cleanup) }
+                Button("compare copies") { checked = Set(records.filter { $0.name == skill.name || (skill.contentFingerprint != nil && $0.contentFingerprint == skill.contentFingerprint) }.map(\.id)); openOrganization(.cleanup) }.accessibilityLabel("Compare copies")
                     .buttonStyle(ContextDaddyButtonStyle())
             }
             if skill.ownership == .local {
@@ -902,10 +903,10 @@ struct SkillLibraryView: View {
         let folders = Array(Set(summary.observations.compactMap(\.project))).sorted()
         return VStack(alignment: .leading, spacing: 7) {
             HStack {
-                Text("Recorded activity").font(.headline)
+                SMDisplay("recorded activity", size: 13).accessibilityLabel("Recorded activity")
                 Spacer()
                 if model.skillActivity == nil {
-                    Button("Read history") { Task { await model.refreshSkillActivity() } }
+                    Button("read history") { Task { await model.refreshSkillActivity() } }.accessibilityLabel("Read history")
                         .disabled(model.isSkillActivityLoading)
                 }
             }
@@ -939,30 +940,30 @@ struct SkillLibraryView: View {
         }
     }
     @ViewBuilder private func managementActions(_ skill: SkillRecord) -> some View {
-        Button("Edit content") { loadEditor(skill) }
-        Button("Update from folder…") {
+        Button("edit content") { loadEditor(skill) }.accessibilityLabel("Edit content")
+        Button("update from folder…") {
             guard let source = chooseFolder("Choose the replacement skill folder") else { return }
             perform { try await manager.prepareUpdate(skill: URL(fileURLWithPath: skill.id), source: source) }
-        }
+        }.accessibilityLabel("Update from folder…")
         Menu("More") {
-            Button("Share to agent or project…") { share(skill) }
-            Button("Archive skill…") { perform { try await manager.prepareArchive(skill: URL(fileURLWithPath: skill.id)) } }
+            Button("share to agent or project…") { share(skill) }.accessibilityLabel("Share to agent or project…")
+            Button("archive skill…") { perform { try await manager.prepareArchive(skill: URL(fileURLWithPath: skill.id)) } }.accessibilityLabel("Archive skill…")
         }
     }
     private func content(_ skill: SkillRecord) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             if let document {
                 Text(document).font(.system(.caption, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-                if skill.ownership == .local { Button("Edit content") { draft = document; editor = true }.buttonStyle(ContextDaddyButtonStyle()) }
+                if skill.ownership == .local { Button("edit content") { draft = document; editor = true }.accessibilityLabel("Edit content").buttonStyle(ContextDaddyButtonStyle()) }
             } else {
                 Text("Open SKILL.md explicitly to inspect its instructions. Supporting scripts are never executed.").foregroundStyle(DaddyTheme.muted)
-                Button("Read SKILL.md") {
+                Button("read skill.md") {
                     do {
                         let result = try SkillDocumentReader.read(url: URL(fileURLWithPath: skill.id))
                         document = result.text
                         if result.truncated { notice = "Preview is truncated to 256 KiB. Editing is unavailable for larger documents." }
                     } catch { self.error = error.localizedDescription }
-                }.buttonStyle(ContextDaddyButtonStyle())
+                }.accessibilityLabel("Read SKILL.md").buttonStyle(ContextDaddyButtonStyle())
             }
         }
     }
@@ -982,7 +983,7 @@ struct SkillLibraryView: View {
             }
             Text("Edit SKILL.md to change its declared controls. Codex may also use agents/openai.yaml; global settings and plugin enablement remain with their owning agent.").font(.caption).foregroundStyle(DaddyTheme.muted)
             if skill.ownership == .local {
-                Button("Share to agent or project…") { share(skill) }.buttonStyle(ContextDaddyButtonStyle())
+                Button("share to agent or project…") { share(skill) }.accessibilityLabel("Share to agent or project…").buttonStyle(ContextDaddyButtonStyle())
                 ForEach(skill.exposures.filter { $0.logicalPath != $0.resolvedPath }) { exposure in
                     Button("Remove link: \(exposure.logicalPath)") {
                         perform { try await manager.prepareUnlink(path: URL(fileURLWithPath: exposure.logicalPath).deletingLastPathComponent()) }
@@ -1005,14 +1006,14 @@ struct SkillLibraryView: View {
             Text("Changes affect every link to this physical definition. Review before saving.").foregroundStyle(DaddyTheme.muted)
             TextEditor(text: $draft).font(.system(.body, design: .monospaced)).frame(minHeight: 340)
             HStack {
-                Button("Cancel") { editor = false }.keyboardShortcut(.cancelAction)
+                Button("cancel") { editor = false }.accessibilityLabel("Cancel").keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Review changes") {
+                Button("review changes") {
                     guard let selection else { return }
                     let text = draft
                     editor = false
                     perform { try await manager.prepareEdit(skill: URL(fileURLWithPath: selection.id), text: text) }
-                }.keyboardShortcut(.defaultAction)
+                }.accessibilityLabel("Review changes").keyboardShortcut(.defaultAction)
             }
         }.padding(24).frame(width: 720, height: 560)
     }
@@ -1032,9 +1033,9 @@ struct SkillLibraryView: View {
                 }
             }
             HStack {
-                Button("Cancel") { plan = nil }.keyboardShortcut(.cancelAction)
+                Button("cancel") { plan = nil }.accessibilityLabel("Cancel").keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Apply change") {
+                Button("apply change") {
                     plan = nil; working = true
                     Task {
                         defer { working = false }
@@ -1045,7 +1046,7 @@ struct SkillLibraryView: View {
                             await refreshLibrary()
                         } catch { self.error = error.localizedDescription }
                     }
-                }.keyboardShortcut(.defaultAction).disabled(working || model.isLoading)
+                }.accessibilityLabel("Apply change").keyboardShortcut(.defaultAction).disabled(working || model.isLoading)
             }
         }.padding(24).frame(width: 760, height: 570)
     }
@@ -1067,20 +1068,20 @@ struct SkillLibraryView: View {
                     }
                     ForEach(Array(Set(model.catalog?.coverage.roots ?? [])).sorted(), id: \.self) { path($0) }
                     Divider()
-                    Text("Added skill folders").font(.headline)
+                    SMDisplay("added skill folders", size: 13).accessibilityLabel("Added skill folders")
                     ForEach(UserDefaults.standard.stringArray(forKey: "contextDaddySkillRoots") ?? [], id: \.self) { root in
                         HStack {
                             path(root)
-                            Button("Stop scanning") {
+                            Button("stop scanning") {
                                 let roots = (UserDefaults.standard.stringArray(forKey: "contextDaddySkillRoots") ?? []).filter { $0 != root }
                                 UserDefaults.standard.set(roots, forKey: "contextDaddySkillRoots")
                                 Task { await refreshLibrary() }
-                            }
+                            }.accessibilityLabel("Stop scanning")
                         }
                     }
                 }
             }
-            HStack { Button("Add skill location…") { addLocation() }; Spacer(); Button("Done") { showLocations = false }.keyboardShortcut(.cancelAction) }
+            HStack { Button("add skill location…") { addLocation() }.accessibilityLabel("Add skill location…"); Spacer(); Button("done") { showLocations = false }.accessibilityLabel("Done").keyboardShortcut(.cancelAction) }
         }.padding(24).frame(width: 720, height: 580)
     }
     private var historySheet: some View {
@@ -1100,14 +1101,14 @@ struct SkillLibraryView: View {
                                 if let backup = receipt.backupPath { path(backup) }
                             }
                             else if receipt.restored { Text("Restored").foregroundStyle(DaddyTheme.mint) }
-                            else { Button("Restore…") { restoreReceipt = receipt } }
+                            else { Button("restore…") { restoreReceipt = receipt }.accessibilityLabel("Restore…") }
                         }
                         Divider()
                     }
                 }
             }
             if let error { Text(error).foregroundStyle(DaddyTheme.coral) }
-            Button("Done") { showHistory = false }.keyboardShortcut(.cancelAction)
+            Button("done") { showHistory = false }.accessibilityLabel("Done").keyboardShortcut(.cancelAction)
         }.padding(24).frame(width: 720, height: 560)
     }
     private func refreshLibrary() async {
@@ -1171,17 +1172,17 @@ private struct SkillCreateSheet: View {
             TextField("When should an agent use this skill?", text: $description).textFieldStyle(.roundedBorder)
             TextEditor(text: $bodyText).font(.system(.body, design: .monospaced)).frame(minHeight: 220)
             Text(parent.path).font(.caption.monospaced()).textSelection(.enabled)
-            Button("Choose destination…") {
+            Button("choose destination…") {
                 let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false
                 if panel.runModal() == .OK, let url = panel.url { parent = url }
-            }
+            }.accessibilityLabel("Choose destination…")
             HStack {
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("cancel") { dismiss() }.accessibilityLabel("Cancel").keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Review new skill") {
+                Button("review new skill") {
                     let encoded = String(data: try! JSONEncoder().encode(description), encoding: .utf8)!
                     create(parent, name, "---\nname: \(name)\ndescription: \(encoded)\n---\n\n\(bodyText)")
-                }.disabled(name.isEmpty || description.isEmpty).keyboardShortcut(.defaultAction)
+                }.accessibilityLabel("Review new skill").disabled(name.isEmpty || description.isEmpty).keyboardShortcut(.defaultAction)
             }
         }.padding(24).frame(width: 680, height: 520)
     }
@@ -1217,7 +1218,7 @@ private struct SkillShareSheet: View {
                     if panel.runModal() == .OK { project = panel.url }
                 }
             }
-            Text("Destination").font(.headline)
+            SMDisplay("destination", size: 13).accessibilityLabel("Destination")
             Text(destination.appendingPathComponent(URL(fileURLWithPath: skill.id).deletingLastPathComponent().lastPathComponent).path)
                 .font(.caption.monospaced()).textSelection(.enabled)
             if runtime == .devin {
@@ -1225,9 +1226,9 @@ private struct SkillShareSheet: View {
             }
             Text("This shares access; it does not force automatic invocation or change agent settings. An existing destination will never be overwritten.").font(.callout).foregroundStyle(DaddyTheme.muted)
             HStack {
-                Button("Cancel") { dismiss() }.keyboardShortcut(.cancelAction)
+                Button("cancel") { dismiss() }.accessibilityLabel("Cancel").keyboardShortcut(.cancelAction)
                 Spacer()
-                Button("Review link") { share(destination, projectOnly ? project : nil) }
+                Button("review link") { share(destination, projectOnly ? project : nil) }.accessibilityLabel("Review link")
                     .disabled(projectOnly && project == nil).keyboardShortcut(.defaultAction)
             }
         }.padding(24).frame(width: 620)

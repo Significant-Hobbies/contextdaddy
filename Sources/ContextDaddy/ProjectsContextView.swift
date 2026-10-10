@@ -58,10 +58,10 @@ struct ProjectsContextView: View {
                 art: .projects
             )
             HStack(spacing: 12) {
-                Button("Choose folder…", systemImage: "folder.badge.plus", action: chooseFolder)
+                Button("choose folder…", systemImage: "folder.badge.plus", action: chooseFolder).accessibilityLabel("Choose folder…")
                     .buttonStyle(ContextDaddyButtonStyle())
                 if !search.isEmpty {
-                    Button("Clear search") { search = "" }
+                    Button("clear search") { search = "" }.accessibilityLabel("Clear search")
                         .buttonStyle(ContextDaddyButtonStyle())
                 }
             }

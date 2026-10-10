@@ -32,12 +32,12 @@ struct AgentRecordedActivityView: View {
                             Text("\(session.lastActivity ?? "Time not recorded") · \(session.totals.generatedTokens.formatted()) generated tokens")
                                 .font(.caption).foregroundStyle(DaddyTheme.muted)
                             if let path = session.project, path.hasPrefix("/"), FileManager.default.fileExists(atPath: path) {
-                                Button("Inspect this folder’s skills") {
+                                Button("inspect this folder’s skills") {
                                     workingFolder = path
                                     model.pendingSkillAllFolders = false
                                     model.pendingSkillRuntime = runtime
                                     model.show(.skills)
-                                }.font(.caption)
+                                }.accessibilityLabel("Inspect this folder’s skills").font(.caption)
                             }
                         }
                     }
@@ -63,16 +63,16 @@ struct AgentRecordedActivityView: View {
                                 Text("Updated " + file.modified.formatted(date: .abbreviated, time: .shortened)).font(.caption2).foregroundStyle(DaddyTheme.muted)
                             }
                             Spacer()
-                            Button("Reveal") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file.path)]) }.font(.caption)
+                            Button("reveal") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: file.path)]) }.accessibilityLabel("Reveal").font(.caption)
                         }
                     }
                     if snapshot.files.count > 5 { Button(expanded ? "Show fewer files" : "Show all \(snapshot.files.count) files") { expanded.toggle() }.font(.caption) }
                     }.font(.caption)
                 } else { ProgressView("Finding local activity files…") }
-                Button("Open this agent’s usage history") {
+                Button("open this agent’s usage history") {
                     model.usageHistoryAgents = [runtime.rawValue.lowercased()]
                     model.show(.overview)
-                }.font(.caption)
+                }.accessibilityLabel("Open this agent’s usage history").font(.caption)
                 if runtime == .cursor {
                     Link("Open Cursor usage dashboard", destination: URL(string: "https://cursor.com/dashboard")!).font(.caption)
                     Text("Cursor transcript files provide local activity evidence. Billing and usage analytics remain in Cursor's dashboard; file counts are not usage totals.").font(.caption2).foregroundStyle(DaddyTheme.muted)

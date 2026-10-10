@@ -25,6 +25,11 @@ class ContextSparkleBundleTests(unittest.TestCase):
         shutil.copy2(Path(__file__).with_name("package-contextdaddy.py"), root / "scripts/package-contextdaddy.py")
         for name in ("binary", "helper", "CONTEXTDADDY_NOTICES.md"):
             (root / name).write_text("fixture")
+        fonts = root / "SaaSMakerUI_SaaSMakerUI.bundle/Fonts"
+        fonts.mkdir(parents=True)
+        (fonts / "Figtree.ttf").write_bytes(b"fixture font")
+        (fonts / "Licenses").mkdir()
+        (fonts / "Licenses/figtree-OFL.txt").write_text("fixture license")
         (root / "Support").mkdir()
         (root / "Support/ContextDaddy.icns").write_bytes(b"fixture")
         (root / "Assets").mkdir()
@@ -62,3 +67,31 @@ class ContextSparkleBundleTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 self.package(root, updates=True)
             self.assertFalse((root / "fixture.app").exists())
+
+    def test_ui_fonts_and_licenses_are_copied_next_to_existing_resources(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self.fixture(root)
+            self.package(root)
+            resources = root / "fixture.app/Contents/Resources"
+            fonts = resources / "SaaSMakerUI_SaaSMakerUI.bundle/Fonts"
+            self.assertEqual((fonts / "Figtree.ttf").read_bytes(), b"fixture font")
+            self.assertEqual((fonts / "Licenses/figtree-OFL.txt").read_text(), "fixture license")
+            self.assertTrue((resources / "AIContext.png").is_file())
+            # Repackaging an existing local app keeps the resource bundle available.
+            self.package(root)
+            self.assertTrue((fonts / "Figtree.ttf").is_file())
+
+    def test_missing_ui_bundle_fails_before_mutating_existing_app(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self.fixture(root)
+            (root / "SaaSMakerUI_SaaSMakerUI.bundle").rename(root / "unrelated.bundle")
+            app = root / "fixture.app"
+            app.mkdir()
+            marker = app / "existing"
+            marker.write_text("preserve")
+            with self.assertRaisesRegex(SystemExit, "Missing required SaaSMakerUI font resource bundle"):
+                self.package(root)
+            self.assertEqual(marker.read_text(), "preserve")
+            self.assertFalse((app / "Contents").exists())
