@@ -1,6 +1,7 @@
 import AppKit
 import ContextCore
 import SwiftUI
+import SaaSMakerUI
 
 struct RootView: View {
     @Environment(ContextDaddyModel.self) private var model
@@ -23,7 +24,7 @@ struct RootView: View {
                         } label: {
                             HStack(spacing: 10) {
                                 Image(systemName: section.icon).frame(width: 18)
-                                Text(section.label)
+                                Text(section.label.lowercased()).accessibilityLabel(section.label)
                                 Spacer()
                             }
                             .font(.system(size: 13, weight: model.section == section && !model.evidenceOpen ? .semibold : .regular))
@@ -108,8 +109,8 @@ struct RootView: View {
         .frame(width: viewport.size.width, height: viewport.size.height)
         }
         .task { if refreshOnAppear { await model.refresh() } }
-        .preferredColorScheme(.dark)
-        .tint(DaddyTheme.mint)
+        .smTheme(DaddyTheme.palette)
+        .font(.custom(DaddyTheme.palette.sansFont, size: 13))
         .buttonStyle(ContextDaddyButtonStyle())
         .toolbar(.hidden, for: .windowToolbar)
     }
@@ -175,13 +176,7 @@ struct ScreenHeader: View {
 
     private var horizontalHeader: some View {
         HStack(alignment: .center, spacing: 22) {
-            VStack(alignment: .leading, spacing: 7) {
-                if !eyebrow.isEmpty {
-                    Text(eyebrow.uppercased()).font(.system(size: 10, weight: .bold, design: .rounded)).tracking(1).foregroundStyle(DaddyTheme.mint)
-                }
-                Text(title).font(.system(size: 27, weight: .semibold, design: .rounded)).tracking(-0.5)
-                Text(subtitle).font(.subheadline).foregroundStyle(DaddyTheme.muted).fixedSize(horizontal: false, vertical: true)
-            }
+            headerText(size: 27)
             Spacer(minLength: 12)
             if hero {
                 ContextHeroArt().frame(width: 200, height: 92)
@@ -194,17 +189,21 @@ struct ScreenHeader: View {
 
     private var compactHeader: some View {
         HStack(alignment: .top, spacing: 14) {
-            VStack(alignment: .leading, spacing: 6) {
-                if !eyebrow.isEmpty {
-                    Text(eyebrow.uppercased()).font(.system(size: 10, weight: .bold, design: .rounded)).tracking(1).foregroundStyle(DaddyTheme.mint)
-                }
-                Text(title).font(.system(size: 22, weight: .semibold, design: .rounded)).tracking(-0.4)
-                Text(subtitle).font(.caption).foregroundStyle(DaddyTheme.muted).lineLimit(2)
-            }
+            headerText(size: 22)
             Spacer(minLength: 8)
             ContextDoodleArt(topic: art).frame(width: 46, height: 46)
         }
     }
+
+    private func headerText(size: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            SMSectionHeader(eyebrow: eyebrow.isEmpty ? nil : eyebrow.lowercased(), title, size: size)
+                .accessibilityLabel(eyebrow.isEmpty ? title : "\(eyebrow), \(title)")
+            Text(subtitle).font(.subheadline).foregroundStyle(DaddyTheme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
 }
 
 struct LiveRunsView: View {
@@ -567,14 +566,14 @@ struct CoverageView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Diagnostics").font(.title.bold())
+                    SMSectionHeader("diagnostics", size: 27).accessibilityLabel("Diagnostics")
                     Text("Find broken agent setup, see its impact, and copy a fix to your agent.").foregroundStyle(DaddyTheme.muted)
                 }
                 HStack {
                     Label(model.discoveryStatus, systemImage: model.isLoading ? "arrow.triangle.2.circlepath" : model.discoveryReport == nil ? "questionmark.circle" : "checkmark.circle")
                         .font(.caption).foregroundStyle(model.isLoading ? DaddyTheme.blue : DaddyTheme.muted)
                     Spacer()
-                    Button("Add folder…", systemImage: "folder.badge.plus", action: addFolders)
+                    Button("add folder…", systemImage: "folder.badge.plus", action: addFolders).accessibilityLabel("Add folder…")
                 }
                 if model.isLoading {
                     RefreshContinuityBanner(started: model.loadStarted, hasPreviousResults: model.discoveryReport != nil)
@@ -597,7 +596,7 @@ struct CoverageView: View {
                     }
                     Panel {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("Scanned roots").font(.headline)
+                            SMDisplay("scanned roots", size: 13).accessibilityLabel("Scanned roots")
                             ForEach(catalog.coverage.roots, id: \.self) { root in
                                 Label(root, systemImage: "folder").font(.caption.monospaced()).foregroundStyle(DaddyTheme.muted).textSelection(.enabled)
                             }
@@ -607,7 +606,7 @@ struct CoverageView: View {
                         VStack(alignment: .leading, spacing: 12) {
                             HStack {
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text("Added folders").font(.headline)
+                                    SMDisplay("added folders", size: 13).accessibilityLabel("Added folders")
                                     Text("Persisted locally and included in future bounded discovery runs.")
                                         .font(.caption).foregroundStyle(DaddyTheme.muted)
                                 }
@@ -619,17 +618,17 @@ struct CoverageView: View {
                                     Label(path, systemImage: "folder.badge.plus").font(.caption.monospaced())
                                         .lineLimit(1).truncationMode(.middle).textSelection(.enabled)
                                     Spacer()
-                                    Button("Remove") {
+                                    Button("remove") {
                                         model.removeExtraRoot(path)
                                         Task { await model.refresh() }
-                                    }.controlSize(.small)
+                                    }.accessibilityLabel("Remove").controlSize(.small)
                                 }
                             }
                         }.frame(maxWidth: .infinity, alignment: .leading)
                     }
                     Panel {
                         VStack(alignment: .leading, spacing: 10) {
-                            Text("Coverage notes").font(.headline)
+                            SMDisplay("coverage notes", size: 13).accessibilityLabel("Coverage notes")
                             let notes = catalog.coverage.notes + catalog.coverage.limitReasons
                             if notes.isEmpty {
                                 Label("No discovery limits were reported.", systemImage: "checkmark.circle.fill")
@@ -642,7 +641,7 @@ struct CoverageView: View {
                     }
                     Panel {
                         VStack(alignment: .leading, spacing: 12) {
-                            Text("Runtime evidence boundaries").font(.headline)
+                            SMDisplay("runtime evidence boundaries", size: 13).accessibilityLabel("Runtime evidence boundaries")
                             adapter("Codex", "Prometheus aggregates + Tempo sessions + named skill injection", .measured)
                             adapter("Claude", "OTEL metrics when routed to the collector; tool/API events not yet verified", .partial)
                             adapter("Cursor", "Skills and rules discovered; run telemetry unavailable", .partial)

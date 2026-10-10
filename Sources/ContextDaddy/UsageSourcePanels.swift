@@ -1,5 +1,6 @@
 import ContextCore
 import SwiftUI
+import SaaSMakerUI
 
 /// Account allowance, one provider at a time. A provider with a reading gets
 /// one focal number; providers without one collapse to a single quiet line.
@@ -397,7 +398,7 @@ struct UsageSectionTitle: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            Text(title).font(.system(size: 20, weight: .bold, design: .rounded)).tracking(-0.3)
+            SMDisplay(title, size: 20).accessibilityLabel(title)
             Text(detail).font(.caption).foregroundStyle(DaddyTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }

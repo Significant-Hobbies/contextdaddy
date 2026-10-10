@@ -1,6 +1,7 @@
 import AppKit
 import ContextCore
 import SwiftUI
+import SaaSMakerUI
 
 enum DaddyTheme {
     static let canvas = DaddyPalette.canvas
@@ -12,6 +13,26 @@ enum DaddyTheme {
     static let blue = DaddyPalette.blue
     static let amber = DaddyPalette.amber
     static let coral = DaddyPalette.coral
+
+    /// Daddy identity over the library's dark preset; evidence keeps its own roles.
+    static let palette: SMPalette = {
+        var palette = SMPalette.ink.brand(mint, foreground: .black)
+        palette.background = canvas
+        palette.surface = panel
+        palette.card = panel
+        palette.foreground = .white
+        palette.mutedForeground = muted
+        palette.border = line
+        palette.hairline = line
+        palette.success = mint
+        palette.warning = amber
+        palette.destructive = coral
+        palette.radius = 8
+        palette.displayWeight = 600
+        palette.displayTracking = -0.018
+        palette.textFont = palette.sansFont
+        return palette
+    }()
 
     static func color(for quality: EvidenceQuality) -> Color {
         switch quality {
@@ -51,11 +72,7 @@ struct Panel<Content: View>: View {
     }
 
     var body: some View {
-        content
-            .padding(padding)
-            .background(DaddyTheme.panel)
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(DaddyTheme.line))
+        SMCard(padding: padding) { content }
     }
 }
 
@@ -150,14 +167,8 @@ struct EvidenceBadge: View {
     let quality: EvidenceQuality
 
     var body: some View {
-        Text(quality.rawValue.uppercased())
-            .font(.system(size: 9, weight: .bold, design: .rounded))
-            .tracking(0.7)
-            .foregroundStyle(DaddyTheme.color(for: quality))
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4)
-            .background(DaddyTheme.color(for: quality).opacity(0.11))
-            .clipShape(Capsule())
+        SemanticStatusPill(text: quality.rawValue.lowercased(), color: DaddyTheme.color(for: quality))
+            .accessibilityLabel(quality.rawValue.uppercased())
     }
 }
 
@@ -165,13 +176,27 @@ struct PolicyBadge: View {
     let policy: SkillRuntimePolicy
 
     var body: some View {
-        Text(policy.mode == .automatic && !policy.explicit ? "Auto · default" : policy.mode.rawValue)
-            .font(.caption2.weight(.semibold))
-            .foregroundStyle(DaddyTheme.color(for: policy.mode))
-            .padding(.horizontal, 7)
-            .padding(.vertical, 4)
-            .background(DaddyTheme.color(for: policy.mode).opacity(0.1))
-            .clipShape(Capsule())
-            .help(policy.reason)
+        SemanticStatusPill(
+            text: policy.mode == .automatic && !policy.explicit ? "auto · default" : policy.mode.rawValue.lowercased(),
+            color: DaddyTheme.color(for: policy.mode)
+        )
+        .accessibilityLabel(policy.mode == .automatic && !policy.explicit ? "Auto · default" : policy.mode.rawValue)
+        .help(policy.reason)
+    }
+}
+
+/// SMStatusPill has no derived/blue tone. Supply the exact evidence color
+/// without changing the branded palette for neighboring content.
+private struct SemanticStatusPill: View {
+    @Environment(\.smPalette) private var palette
+    let text: String
+    let color: Color
+
+    var body: some View {
+        var evidencePalette = palette
+        evidencePalette.brand = color
+        return SMStatusPill(text, tone: .brand)
+            .environment(\.smPalette, evidencePalette)
+            .fixedSize(horizontal: false, vertical: true)
     }
 }

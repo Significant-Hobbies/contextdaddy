@@ -1,6 +1,7 @@
 import AppKit
 import ContextCore
 import SwiftUI
+import SaaSMakerUI
 
 /// A direct route to the local OTEL evidence. This is deliberately independent
 /// of Usage's allowance, model, source, and date-range controls.
@@ -14,7 +15,7 @@ struct TelemetryView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: compact ? 13 : 19) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Run telemetry").font(.title.bold())
+                        SMSectionHeader("run telemetry", size: 27).accessibilityLabel("Run telemetry")
                         Text("See what ran, where tokens went, and what to review next.")
                             .foregroundStyle(DaddyTheme.muted)
                     }
@@ -35,7 +36,7 @@ struct TelemetryView: View {
                     DisclosureGroup("Recorded history and local source files") {
                         AgentRecordedActivityView(runtime: model.selectedTelemetryRuntime)
                     }
-                    Text("Live signals · separate last-24-hour source").font(.headline)
+                    SMDisplay("live signals · separate last-24-hour source", size: 13).accessibilityLabel("Live signals · separate last-24-hour source")
                     Text("The folder and history filters above do not filter these aggregate signals. No per-folder trace attribution is supplied.").font(.caption).foregroundStyle(DaddyTheme.muted)
 
                     if [.codex, .claude].contains(model.selectedTelemetryRuntime) {
@@ -48,11 +49,11 @@ struct TelemetryView: View {
                     } else {
                         Panel {
                             VStack(alignment: .leading, spacing: 10) {
-                                Text("Activity is not available yet").font(.headline)
+                                SMDisplay("activity is not available yet", size: 13).accessibilityLabel("Activity is not available yet")
                                 Text("Connect the selected agent to the local collector, run a task, then check again. Missing telemetry does not mean the agent is idle.")
                                     .font(.callout).foregroundStyle(DaddyTheme.muted)
-                                Button("Copy connection checklist", systemImage: "doc.on.doc", action: copyConnectionChecklist)
-                                Button("Open recorded usage") { model.show(.overview) }
+                                Button("copy connection checklist", systemImage: "doc.on.doc", action: copyConnectionChecklist).accessibilityLabel("Copy connection checklist")
+                                Button("open recorded usage") { model.show(.overview) }.accessibilityLabel("Open recorded usage")
                             }.frame(maxWidth: .infinity, alignment: .leading)
                         }
                     }
@@ -135,11 +136,11 @@ struct TelemetryView: View {
                     .font(.caption)
                     .foregroundStyle(DaddyTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
-                Button("Copy connection checklist", systemImage: "doc.on.doc", action: copyConnectionChecklist)
-                Button("Open Usage history", systemImage: "chart.bar.xaxis") {
+                Button("copy connection checklist", systemImage: "doc.on.doc", action: copyConnectionChecklist).accessibilityLabel("Copy connection checklist")
+                Button("open usage history", systemImage: "chart.bar.xaxis") {
                     model.usageService = .claude
                     model.show(.overview)
-                }
+                }.accessibilityLabel("Open Usage history")
                 .font(.caption)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
