@@ -189,6 +189,8 @@ The owner selected A, Compare providers, on 9 October 2026. Usage has one native
 
 ## Quiet Usage page (2026-10-09)
 
+Sidebar navigation and the brand tagline use lowercase text; the tagline has no letter-spacing.
+
 The owner called the provider grid "chopped": mostly-empty "Not checked" cells, letter-spaced
 caps eyebrows and four equal-weight pickers competed with the one number that matters. Usage now
 uses lowercase headings and actions with no eyebrows. Each provider with a reading gets one focal

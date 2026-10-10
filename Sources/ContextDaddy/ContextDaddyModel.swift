@@ -12,9 +12,11 @@ enum AppSection: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var label: String {
         switch self {
-        case .overview: "Usage"
-        case .telemetry: "Run telemetry"
-        case .skills, .memory, .projects: rawValue
+        case .overview: "usage"
+        case .skills: "skills"
+        case .memory: "memory"
+        case .telemetry: "run telemetry"
+        case .projects: rawValue
         }
     }
     var icon: String {
