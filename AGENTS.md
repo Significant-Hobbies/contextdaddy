@@ -16,4 +16,9 @@ prove a bottleneck, task success or a need for a reply.
 Preserve provenance and unavailable states. Keep discovery read-only; policy
 and context changes require the existing explicit preview/apply/recovery path.
 Use XcodeBuildMCP for native build/test/run verification, focused checks first.
-Do not commit, push, sign, package or release without explicit owner instruction.
+
+- Follow the shared global autonomy policy: finish work within the owner's
+  requested scope, including local builds, tests, signing, packaging,
+  installation, verification, commits and pushes, without extra approvals.
+- Ask only before a public release. Existing user-facing product consent,
+  reviewed actions and recovery requirements still apply.

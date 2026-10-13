@@ -5,6 +5,7 @@ import plistlib
 import shutil
 import subprocess
 import sparkle_support
+import ui_resources
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser()
@@ -117,4 +118,5 @@ if not args.unsigned:
     ], check=False)
     if registration.returncode != 0:
         print("Warning: the app was packaged and signed, but LaunchServices registration did not refresh.")
+ui_resources.check_startup(args.binary, bundle, "ContextDaddy")
 print(f"Packaged {args.binary} -> {bundle}")
