@@ -108,8 +108,8 @@ struct RootView: View {
         }
         .frame(width: viewport.size.width, height: viewport.size.height)
         }
-        .task { if refreshOnAppear { await model.refresh() } }
-        .smTheme(DaddyTheme.palette)
+        .task { if refreshOnAppear && !ContextStartupCheck.enabled { await model.refresh() } }
+        .contextTheme(DaddyTheme.palette)
         .font(.custom(DaddyTheme.palette.sansFont, size: 13))
         .buttonStyle(ContextDaddyButtonStyle())
         .toolbar(.hidden, for: .windowToolbar)

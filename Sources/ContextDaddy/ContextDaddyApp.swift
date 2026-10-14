@@ -2,6 +2,21 @@ import AppKit
 import SwiftUI
 
 @main
+enum ContextDaddyMain {
+    @MainActor
+    static func main() {
+        if CommandLine.arguments.contains("--check-ui-resources") {
+            guard ContextUIResources.loaded else {
+                FileHandle.standardError.write(Data("ContextDaddy UI resources missing or invalid\n".utf8))
+                exit(EXIT_FAILURE)
+            }
+            print("ContextDaddy UI resources loaded")
+            return
+        }
+        ContextDaddyApp.main()
+    }
+}
+
 struct ContextDaddyApp: App {
     @NSApplicationDelegateAdaptor(ContextDaddyAppDelegate.self) private var appDelegate
     @State private var model = ContextDaddyModel()
@@ -13,8 +28,11 @@ struct ContextDaddyApp: App {
                 .environment(model)
                 .preferredColorScheme(.dark)
                 .frame(minWidth: 960, minHeight: 640)
-                .onAppear { appDelegate.activeWork = { model.activeWorkDescription } }
-                .task { updates.start(model: model) }
+                .onAppear {
+                    appDelegate.activeWork = { model.activeWorkDescription }
+                    ContextStartupCheck.windowAppeared()
+                }
+                .task { if !ContextStartupCheck.enabled { updates.start(model: model) } }
         }
         .defaultSize(width: 1180, height: 740)
         // Keep the window at least as wide as RootView's minimum; a narrower

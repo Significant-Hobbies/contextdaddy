@@ -12,11 +12,22 @@ import sparkle_support
 
 class ContextSparkleBundleTests(unittest.TestCase):
     def package(self, root, updates=False):
+        def run(command, **kwargs):
+            if command[0] == str(root / "helper"):
+                output = "ccusage 20.0.24\n"
+            elif "--check-ui-resources" in command:
+                output = "ContextDaddy UI resources loaded\n"
+            elif "--check-app-startup" in command:
+                output = "ContextDaddy app startup verified\n"
+            else:
+                output = ""
+            return subprocess.CompletedProcess(command, 0, output, "")
+
         with patch.object(sparkle_support, "ROOT", root), \
              patch.object(sparkle_support, "FRAMEWORK", root / ".build/artifacts/sparkle/Sparkle/Sparkle.xcframework/macos-arm64_x86_64/Sparkle.framework"), \
              patch.object(sparkle_support, "PUBLIC_KEY", root / "Support/SparklePublicKey.txt"), \
              patch("sys.argv", ["package-contextdaddy.py", str(root / "binary"), "--ccusage", str(root / "helper"), "--unsigned", "--output", str(root / "fixture.app"), *(["--enable-updates"] if updates else [])]), \
-             patch("subprocess.run", return_value=subprocess.CompletedProcess([], 0, "ccusage 20.0.24\n", "")):
+             patch("subprocess.run", side_effect=run):
             runpy.run_path(str(root / "scripts/package-contextdaddy.py"), run_name="__main__")
         return plistlib.loads((root / "fixture.app/Contents/Info.plist").read_bytes())
 

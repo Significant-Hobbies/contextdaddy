@@ -200,3 +200,16 @@ private struct SemanticStatusPill: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 }
+
+extension View {
+    /// Use packaged fonts when available; missing optional fonts must not trap.
+    func contextTheme(_ palette: SMPalette) -> some View {
+        _ = ContextUIResources.loaded
+        return environment(\.smPalette, palette)
+            .tint(palette.brand)
+            .foregroundStyle(palette.foreground)
+            .font(.custom(palette.sansFont, size: 16, relativeTo: .body))
+            .background(palette.background.ignoresSafeArea())
+            .preferredColorScheme(palette.isDark ? .dark : .light)
+    }
+}
