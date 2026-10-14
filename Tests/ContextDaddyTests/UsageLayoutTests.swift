@@ -88,13 +88,23 @@ struct UsageLayoutTests {
         let window = NSWindow(contentRect: hosting.frame, styleMask: [.titled, .resizable],
                               backing: .buffered, defer: false)
         window.contentView = hosting
-        hosting.layoutSubtreeIfNeeded()
-        window.displayIfNeeded()
-        RunLoop.current.run(until: Date().addingTimeInterval(0.25))
-        hosting.layoutSubtreeIfNeeded()
-        window.displayIfNeeded()
+        // The first SwiftUI scroll geometry update can arrive after AppKit's first layout pass.
+        let deadline = Date().addingTimeInterval(2)
+        repeat {
+            hosting.layoutSubtreeIfNeeded()
+            window.displayIfNeeded()
+            let views = scrollViews(in: hosting)
+            if !views.isEmpty && views.allSatisfy({ scrollView in
+                let clip = scrollView.contentView.bounds
+                let document = scrollView.documentView?.frame ?? .zero
+                return clip.origin.x == 0 && document.minX >= 0 && document.width <= clip.width + 0.5
+            }) { break }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.05))
+        } while Date() < deadline
         // The page must never be wider than, or offset from, the area that shows it.
-        for scrollView in scrollViews(in: hosting) {
+        let views = scrollViews(in: hosting)
+        #expect(!views.isEmpty, "\(destination.lastPathComponent): missing scroll view")
+        for scrollView in views {
             let clip = scrollView.contentView.bounds
             let document = scrollView.documentView?.frame ?? .zero
             #expect(clip.origin.x == 0 && document.minX >= 0 && document.width <= clip.width + 0.5,
