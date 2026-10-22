@@ -36,6 +36,7 @@ struct TelemetryView: View {
                     DisclosureGroup("Recorded history and local source files") {
                         AgentRecordedActivityView(runtime: model.selectedTelemetryRuntime)
                     }
+                    SessionTimeView()
                     SMDisplay("live signals · separate last-24-hour source", size: 13).accessibilityLabel("Live signals · separate last-24-hour source")
                     Text("The folder and history filters above do not filter these aggregate signals. No per-folder trace attribution is supplied.").font(.caption).foregroundStyle(DaddyTheme.muted)
 

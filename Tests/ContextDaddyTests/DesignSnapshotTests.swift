@@ -207,6 +207,27 @@ struct DesignSnapshotTests {
         }
     }
 
+    @Test func writesSessionTimeEvidence() throws {
+        let model = ContextDaddyModel()
+        let snapshot = SessionTimeScanner().scan()
+        model.sessionTimeSnapshot = snapshot
+        let root = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let directory = root.appendingPathComponent("artifacts/design", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        for (name, range, scale) in [("all-weeks", SessionTimeRange.all, SessionTimeScale.week), ("month-days", .month, .day)] {
+            model.sessionTimeRange = range
+            model.sessionTimeScale = scale
+            model.sessionTimeReport = SessionTimeReport.build(snapshot: snapshot, filter: model.sessionTimeFilter)
+            for width in [720, 1440] {
+                try render(AnyView(ScrollView { SessionTimeView().padding(24) }.contextTheme(DaddyTheme.palette).font(.custom(DaddyTheme.palette.sansFont, size: 13)).environment(model)), width: width, height: 3200,
+                           to: directory.appendingPathComponent("after-session-time-\(name)-\(width).png"))
+            }
+        }
+    }
+
     private func render(_ view: AnyView, width: Int, height: Int, to url: URL, scrollToBottom: Bool = false) throws {
         let hosting = NSHostingView(rootView: view.preferredColorScheme(.dark)
             .frame(width: CGFloat(width), height: CGFloat(height), alignment: .topLeading)
