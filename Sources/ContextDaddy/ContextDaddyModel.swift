@@ -99,6 +99,22 @@ final class ContextDaddyModel {
     var usageReport: LocalUsageReport?
     var skillActivity: SkillActivitySnapshot?
     var isSkillActivityLoading = false
+    var sessionTimeSnapshot: SessionTimeSnapshot?
+    var sessionTimeReport: SessionTimeReport?
+    var isSessionTimeLoading = false
+    var sessionTimeFilesRead = 0
+    var sessionTimeFilesTotal = 0
+    var sessionTimeAgent: SessionTimeAgentChoice = .all { didSet { rebuildSessionTimeReport() } }
+    var sessionTimeWorkspace = "" { didSet { rebuildSessionTimeReport() } }
+    var sessionTimeRange: SessionTimeRange = .month { didSet { rebuildSessionTimeReport() } }
+    var sessionTimeScale: SessionTimeScale = .week { didSet { rebuildSessionTimeReport() } }
+    var sessionTimeZoneID = UserDefaults.standard.string(forKey: "contextDaddySessionTimeZone") ?? "" {
+        didSet {
+            UserDefaults.standard.set(sessionTimeZoneID, forKey: "contextDaddySessionTimeZone")
+            rebuildSessionTimeReport()
+        }
+    }
+    @ObservationIgnored var sessionTimeBuild: Task<Void, Never>?
     var usageError: String?
     var isUsageLoading = false
     var isDevinLoading = false
@@ -171,6 +187,7 @@ final class ContextDaddyModel {
         if isUsageLoading || isDevinLoading { return "Local usage history is still being read." }
         if isTelemetryLoading { return "Local telemetry is still being read." }
         if isSkillActivityLoading { return "Skill activity history is still being read." }
+        if isSessionTimeLoading { return "Session time is still being read." }
         if isQuotaLoading { return "A provider allowance check is still running." }
         return nil
     }
