@@ -466,11 +466,12 @@ struct SkillLibraryView: View {
                 if let sourceAudit {
                     let values = local.compactMap { sourceAudit.byPath[$0.id] }
                     let tracked = values.filter { $0.kind == .github }.count
+                    let managed = values.filter { $0.kind == .managed }.count
                     let verified = values.filter { $0.kind == .verified }.count
                     let toolOwned = values.filter { $0.kind == .tool }.count
                     let repository = values.filter { $0.kind == .repository }.count
                     let unresolved = values.filter { $0.kind == .unresolved }.count
-                    Text("\(tracked) tracked by Vercel skills · \(verified) verified GitHub sources · \(toolOwned) tool owned · \(repository) in Git repositories · \(unresolved) source unresolved")
+                    Text("\(managed) managed by agent-config · \(tracked) recorded by Vercel skills · \(verified) verified GitHub sources · \(toolOwned) tool owned · \(repository) in Git repositories · \(unresolved) source unresolved")
                         .font(.callout).fixedSize(horizontal: false, vertical: true)
                     Text("Unresolved includes locally authored skills. It is a review queue, not a removal recommendation.")
                         .font(.caption).foregroundStyle(DaddyTheme.muted)
@@ -862,7 +863,7 @@ struct SkillLibraryView: View {
                      ? "Installed by a plugin. We found its files, but have not verified whether the plugin is enabled. This is not evidence that it enters your context."
                      : "We found this file, but no supported agent route to it. It may be a stored source, an old copy, or a location discovery does not understand. This does not prove it is unused.")
                     .font(.callout).foregroundStyle(DaddyTheme.amber)
-                if skill.ownership == .local {
+                if skill.ownership == .local && !ManagedSkillHealth.isManagedPath(skill.id) {
                     Button("make available to an agent…") { share(skill) }.accessibilityLabel("Make available to an agent…")
                 }
             }
@@ -886,13 +887,13 @@ struct SkillLibraryView: View {
                 Button("compare copies") { checked = Set(records.filter { $0.name == skill.name || (skill.contentFingerprint != nil && $0.contentFingerprint == skill.contentFingerprint) }.map(\.id)); openOrganization(.cleanup) }.accessibilityLabel("Compare copies")
                     .buttonStyle(ContextDaddyButtonStyle())
             }
-            if skill.ownership == .local {
+            if skill.ownership == .local && !ManagedSkillHealth.isManagedPath(skill.id) {
                 ViewThatFits(in: .horizontal) {
                     HStack { managementActions(skill) }
                     VStack(alignment: .leading) { managementActions(skill) }
                 }
             } else {
-                Text("Managed by \(skill.ownership == .plugin ? "the plugin installer" : "the system skill owner"). Update or remove it through that owner. Cached installation alone does not prove agent access.")
+                Text(ManagedSkillHealth.isManagedPath(skill.id) ? "Managed by agent-config. Update its canonical source or patch and sync through that manager. Installed copies are read-only here." : "Managed by \(skill.ownership == .plugin ? "the plugin installer" : "the system skill owner"). Update or remove it through that owner. Cached installation alone does not prove agent access.")
                     .font(.callout).foregroundStyle(DaddyTheme.amber)
             }
         }
@@ -954,7 +955,7 @@ struct SkillLibraryView: View {
         VStack(alignment: .leading, spacing: 12) {
             if let document {
                 Text(document).font(.system(.caption, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-                if skill.ownership == .local { Button("edit content") { draft = document; editor = true }.accessibilityLabel("Edit content").buttonStyle(ContextDaddyButtonStyle()) }
+                if skill.ownership == .local && !ManagedSkillHealth.isManagedPath(skill.id) { Button("edit content") { draft = document; editor = true }.accessibilityLabel("Edit content").buttonStyle(ContextDaddyButtonStyle()) }
             } else {
                 Text("Open SKILL.md explicitly to inspect its instructions. Supporting scripts are never executed.").foregroundStyle(DaddyTheme.muted)
                 Button("read skill.md") {
@@ -982,7 +983,7 @@ struct SkillLibraryView: View {
                 Divider()
             }
             Text("Edit SKILL.md to change its declared controls. Codex may also use agents/openai.yaml; global settings and plugin enablement remain with their owning agent.").font(.caption).foregroundStyle(DaddyTheme.muted)
-            if skill.ownership == .local {
+            if skill.ownership == .local && !ManagedSkillHealth.isManagedPath(skill.id) {
                 Button("share to agent or project…") { share(skill) }.accessibilityLabel("Share to agent or project…").buttonStyle(ContextDaddyButtonStyle())
                 ForEach(skill.exposures.filter { $0.logicalPath != $0.resolvedPath }) { exposure in
                     Button("Remove link: \(exposure.logicalPath)") {

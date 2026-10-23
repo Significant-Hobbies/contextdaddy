@@ -2,6 +2,7 @@ import Foundation
 
 public struct ExternalSkillSourceEvidence: Sendable, Equatable {
     public enum Kind: String, Sendable {
+        case managed = "Managed by agent-config"
         case github = "GitHub source recorded"
         case verified = "GitHub source verified"
         case tool = "Installed tool source"
@@ -45,8 +46,10 @@ public struct ExternalSkillSources: Sendable {
         let unavailable = (asm == nil ? ["ASM"] : []) + (skillsGlobal == nil || skillsProject == nil ? ["Vercel skills"] : [])
         var evidenceByPath: [String: ExternalSkillSourceEvidence] = [:]
         let verifiedSources = VerifiedSkillSources()
+        let managed = try? await ManagedSkillHealth.check()
         for path in skillPaths {
             var evidence = Self.resolve(skillPath: path, asm: asm ?? Data(), skillsLists: [skillsGlobal ?? Data(), skillsProject ?? Data()])
+            if evidence.kind != .plugin, let owner = managed?.sourceEvidence(skillPath: path) { evidence = owner }
             if evidence.kind == .unresolved {
                 if let verified = verifiedSources.lookup(skillPath: path) {
                     evidence = verified
@@ -119,7 +122,7 @@ public struct ExternalSkillSources: Sendable {
             owner: "Git repository", note: "This skill file is tracked in the local repository. This is its repository origin, not a Vercel skills update record.")
     }
 
-    private static func run(tool: String, arguments: [String], folder: URL) async throws -> Data {
+    static func run(tool: String, arguments: [String], folder: URL, acceptableStatuses: Set<Int32> = [0]) async throws -> Data {
         try await Task.detached(priority: .utility) {
             let home = FileManager.default.homeDirectoryForCurrentUser.path
             let environment = ProcessInfo.processInfo.environment
@@ -145,7 +148,7 @@ public struct ExternalSkillSources: Sendable {
             }
             let data = output.fileHandleForReading.readDataToEndOfFile()
             process.waitUntilExit()
-            guard process.terminationStatus == 0, data.count <= 5_000_000 else {
+            guard acceptableStatuses.contains(process.terminationStatus), data.count <= 5_000_000 else {
                 throw CocoaError(.fileReadUnknown)
             }
             return data

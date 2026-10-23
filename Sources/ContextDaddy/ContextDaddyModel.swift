@@ -139,6 +139,9 @@ final class ContextDaddyModel {
     var usageHistoryGrouping: UsageHistoryGrouping = .model
     var usageHistoryAgents: Set<String> = []
     var configurationHealth: ConfigurationHealthReport = .empty
+    var managedSkillHealth: ManagedSkillHealth?
+    var managedSkillHealthError: String?
+    var isCheckingManagedSkills = false
     var configurationIssueBaseline: ConfigurationIssueBaseline?
     var configurationIssueVerification: ConfigurationIssueVerification?
     var isVerifyingConfigurationIssues = false
@@ -354,6 +357,19 @@ final class ContextDaddyModel {
     }
 
     private var configurationGeneration = UUID()
+    func checkManagedSkills() async {
+        guard !isCheckingManagedSkills else { return }
+        isCheckingManagedSkills = true
+        defer { isCheckingManagedSkills = false }
+        do {
+            managedSkillHealth = try await ManagedSkillHealth.check()
+            managedSkillHealthError = nil
+        } catch {
+            managedSkillHealth = nil
+            managedSkillHealthError = "Could not verify agent-config. Install or update the manager with status --json support, then check again. No skill files were changed."
+        }
+    }
+
     func refreshConfigurationHealth() async {
         let request = UUID()
         configurationGeneration = request
@@ -372,6 +388,7 @@ final class ContextDaddyModel {
         }.value
         guard configurationGeneration == request else { return }
         configurationHealth = report
+        if managedSkillHealth != nil || managedSkillHealthError != nil { await checkManagedSkills() }
     }
 
     func refreshSkillLibrary() async {

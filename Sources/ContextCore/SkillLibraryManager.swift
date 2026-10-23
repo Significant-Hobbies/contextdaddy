@@ -184,6 +184,7 @@ public actor SkillLibraryManager {
     }
 
     public func prepareUnlink(path: URL) throws -> SkillChangePlan {
+        guard !ManagedSkillHealth.isManagedPath(path.path) else { throw failure("This link is maintained by agent-config. Change its registered targets through that manager.") }
         try writable(path.deletingLastPathComponent())
         guard try path.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink == true else {
             throw failure("Only a directory link can be removed here. The physical source is never removed by this action.")
@@ -446,6 +447,9 @@ public actor SkillLibraryManager {
         try writable(url)
     }
     private func writable(_ url: URL) throws {
+        guard !ManagedSkillHealth.isManagedPath(url.path) else {
+            throw failure("This definition is maintained by agent-config. Change its canonical source or patch and run agent-config sync; do not edit its installed copy here.")
+        }
         guard SkillOwnership.classify(path: url.path) == .local else { throw failure("This skill is managed by its plugin or system owner. Use that owner to change it.") }
         try safePath(url)
     }
