@@ -20,6 +20,19 @@ struct SkillLibraryManagerTests {
         #expect(try await manager.history().first?.restored == true)
     }
 
+    @Test func agentConfigCopiesAndAliasesCannotBeChangedThroughLibraryActions() async throws {
+        let f = try LibraryFixture()
+        let skill = try f.skill(text, name: ".local/share/agent-config/skills/example")
+        let alias = f.root.appendingPathComponent("example-link")
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: skill.deletingLastPathComponent())
+        let manager = SkillLibraryManager(storage: f.root.appendingPathComponent("history"))
+        await #expect(throws: SkillManagementError.self) { try await manager.prepareEdit(skill: skill, text: text + "Changed") }
+        await #expect(throws: SkillManagementError.self) { try await manager.prepareInvocation(skill: alias.appendingPathComponent("SKILL.md"), runtime: .codex, automatic: false) }
+        await #expect(throws: SkillManagementError.self) { try await manager.prepareUnlink(path: alias) }
+        #expect(try String(contentsOf: skill, encoding: .utf8) == text)
+        #expect(FileManager.default.fileExists(atPath: alias.path))
+    }
+
     @Test func staleEditsAndRestoreNeverOverwriteNewWork() async throws {
         let f = try LibraryFixture(); let skill = try f.skill(text)
         let manager = SkillLibraryManager(storage: f.root.appendingPathComponent("history"))

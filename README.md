@@ -111,3 +111,11 @@ older builds contain no updater. Qualify its native menu and a subsequent signed
 feed upgrade before calling installed-app auto-update acceptance complete.
 Candidate checks do not install apps or publish releases. Dedicated signing setup,
 Apple qualification, publication and installed-update acceptance are separate gates.
+
+Diagnostics includes **Managed setup** for an installed `~/.agent-config` manager.
+**Check managed setup** runs its read-only `status --json` command (schema 1);
+it never syncs or repairs skills. It distinguishes registered installation drift,
+patch/policy recipe changes, hourly maintenance, and broader discovery coverage.
+A missing or incompatible manager remains unverified. Source audits name
+agent-config as the update owner for its managed definitions, including nested
+skills; npx source records remain attribution rather than installation authority.

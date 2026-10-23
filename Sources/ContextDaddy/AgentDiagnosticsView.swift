@@ -20,6 +20,7 @@ struct AgentDiagnosticsView: View {
             return policy.mode == .unverified || (policy.desiredMode != nil && policy.desiredMode != policy.mode)
         }
         VStack(alignment: .leading, spacing: 14) {
+            ManagedSkillHealthView()
             ContextChoiceMenu(title: "Agent", selection: Bindable(model).selectedTelemetryRuntime,
                               choices: AgentRuntime.allCases.map { ContextChoice($0, $0.rawValue) }, width: 180)
             ViewThatFits(in: .horizontal) {

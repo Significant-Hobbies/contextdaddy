@@ -115,6 +115,18 @@ struct InstructionHygieneAuditTests {
         #expect(findings.allSatisfy { $0.runtime == .claude && $0.severity == .warning })
     }
 
+    @Test func childInstructionsReadBeforeWorkingThereStayConditional() throws {
+        let home = try fixture()
+        let project = home.appendingPathComponent("project")
+        try write(project.appendingPathComponent("child/AGENTS.md"), "child-only rules")
+        try write(project.appendingPathComponent("shared/AGENTS.md"), "shared rules")
+        try write(project.appendingPathComponent("CLAUDE.md"), "Read `child/AGENTS.md` before working there.\nAlso read and follow `shared/AGENTS.md`.")
+        let findings = InstructionHygieneAudit.audit(home: home, projects: [project]).issues
+            .filter { $0.title == "Referenced instructions are not imported" }
+        #expect(findings.count == 1)
+        #expect(findings.first?.detail.contains("shared/AGENTS.md") == true)
+    }
+
     @Test func skillTriggerHygiene() throws {
         let home = try fixture()
         let skills = home.appendingPathComponent(".claude/skills")

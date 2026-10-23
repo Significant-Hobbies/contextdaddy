@@ -113,8 +113,12 @@ public enum InstructionHygieneAudit {
         /// Prose that points at another instruction file which no Claude-loaded file imports.
         mutating func unimportedReferences(visible: Set<String>) {
             for (file, text) in loaded {
+                let originalLines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
                 for (index, line) in InstructionImports.proseLines(text) + codeSpanLines(text) {
                     for raw in mentionedPaths(in: line) {
+                        let original = originalLines[index].replacingOccurrences(of: "`", with: "").lowercased()
+                        // A scoped instruction lead should not load a child project's rules everywhere.
+                        if original.contains("read \(raw.lowercased()) before working there") { continue }
                         let target: URL
                         if raw.hasPrefix("~/") { target = home.appendingPathComponent(String(raw.dropFirst(2))) }
                         else if raw.hasPrefix("/") { target = URL(fileURLWithPath: raw) }

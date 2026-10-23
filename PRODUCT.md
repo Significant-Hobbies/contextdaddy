@@ -46,6 +46,7 @@ telemetry does not prove a runtime bottleneck, successful task or need for a rep
 - Project context distinguishes global, inherited, local, conditional, and installed-only evidence.
 - Context-size estimates remain visibly approximate and never masquerade as live prompt measurements.
 - Every source can be traced back to its logical path and, when linked, its physical path.
+- Diagnostics can explicitly check an installed agent-config manager through its read-only JSON status API. Registered pins, content snapshots, patch/policy recipes, links and maintenance are separate from broader partial discovery and live runtime activation. Managed source ownership takes precedence over npx attribution.
 - Every usage value states its provenance.
 - Local agent-log history, provider allowance, and OTEL activity are distinct ledgers; neither quotas nor overlapping telemetry are added to token history.
 - Historical usage can be inspected by service, observed model or inferred model provider, time range, metric, and day/week/month scale. Model and provider mix comes from daily accounting. Project grouping and recent activity use separately labelled, verified session identities and may not reconcile to daily totals. Devin's indexed daily tokens join the same model and provider history, with a shared agent filter; cost and project attribution remain unavailable.
