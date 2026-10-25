@@ -34,7 +34,12 @@ struct SessionTimeView: View {
             }
         }
         .task {
+            // Re-read while visible; unchanged files come from the scan cache.
             if hasRead, model.sessionTimeSnapshot == nil { await model.refreshSessionTime() }
+            while !Task.isCancelled {
+                do { try await Task.sleep(for: .seconds(120)) } catch { return }
+                if hasRead { await model.refreshSessionTime() }
+            }
         }
     }
 
@@ -173,17 +178,28 @@ struct SessionTimeView: View {
 
     private func periodChart(_ report: SessionTimeReport) -> some View {
         let groups: [SessionTimeGroup] = [.localRuns, .ciCD, .model, .subagents, .otherTools]
-        let unit: Calendar.Component = report.filter.scale == .day ? .day : .weekOfYear
+        // Idle periods are dropped so a quiet stretch does not leave a run of empty slots.
+        let periods = report.periods.filter { $0.sessionSeconds > 0 }
+        let titles = Dictionary(uniqueKeysWithValues: periods.map { (periodKey($0), periodTitle($0, report)) })
+        let stride = max(1, (periods.count + 7) / 8)
+        let labelled = Set(periods.enumerated().filter { $0.offset % stride == 0 }.map { periodKey($0.element) })
         return Panel {
             VStack(alignment: .leading, spacing: 10) {
                 Text("Session time by \(report.filter.scale.rawValue)").font(.headline)
                 Chart {
-                    ForEach(report.periods) { period in
+                    ForEach(periods) { period in
                         ForEach(groups) { group in
-                            BarMark(x: .value("Period", period.start, unit: unit),
+                            BarMark(x: .value("Period", periodKey(period)),
                                     y: .value("Hours", (period.groupSeconds[group] ?? 0) / 3600))
                                 .foregroundStyle(by: .value("Activity", group.title))
                                 .opacity((period.coverage ?? 1) < 0.8 ? 0.35 : 1)
+                        }
+                    }
+                }
+                .chartXAxis {
+                    AxisMarks { value in
+                        if let key = value.as(String.self), labelled.contains(key) {
+                            AxisValueLabel(collisionResolution: .disabled) { Text(titles[key] ?? "") }
                         }
                     }
                 }
@@ -369,6 +385,11 @@ struct SessionTimeView: View {
                 .accessibilityElement(children: .combine)
             }
         }
+    }
+
+    /// Stable categorical key for a period; titles alone can repeat across years.
+    private func periodKey(_ period: SessionTimePeriod) -> String {
+        String(Int(period.start.timeIntervalSince1970))
     }
 
     private func periodTitle(_ period: SessionTimePeriod, _ report: SessionTimeReport) -> String {
