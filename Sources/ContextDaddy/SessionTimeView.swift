@@ -1,3 +1,4 @@
+import AppKit
 import Charts
 import ContextCore
 import SaaSMakerUI
@@ -8,6 +9,7 @@ import SwiftUI
 struct SessionTimeView: View {
     @Environment(ContextDaddyModel.self) private var model
     @AppStorage("contextDaddySessionTimeRead") private var hasRead = false
+    @State private var visibility = SessionTimeVisibility()
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
@@ -33,12 +35,13 @@ struct SessionTimeView: View {
                 }
             }
         }
+        .background(SessionTimeWindowReader(view: visibility).frame(width: 0, height: 0))
         .task {
             // Re-read while visible; unchanged files come from the scan cache.
             if hasRead, model.sessionTimeSnapshot == nil { await model.refreshSessionTime() }
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .seconds(120)) } catch { return }
-                if hasRead { await model.refreshSessionTime() }
+                if hasRead, visibility.allowsAutomaticRead { await model.refreshSessionTime() }
             }
         }
     }
@@ -433,4 +436,19 @@ struct SessionTimeView: View {
         case .backgroundOnly: DaddyTheme.muted.opacity(0.6)
         }
     }
+}
+
+@MainActor final class SessionTimeVisibility: NSView {
+    var allowsAutomaticRead: Bool {
+        guard let window else { return false }
+        return !NSApplication.shared.isHidden && window.isVisible && !window.isMiniaturized
+            && window.occlusionState.contains(.visible)
+    }
+}
+
+private struct SessionTimeWindowReader: NSViewRepresentable {
+    let view: SessionTimeVisibility
+
+    func makeNSView(context: Context) -> SessionTimeVisibility { view }
+    func updateNSView(_ nsView: SessionTimeVisibility, context: Context) {}
 }
