@@ -34,34 +34,36 @@ final class BackgroundActivityTests: XCTestCase {
         XCTAssertTrue(updates.isIdle)
     }
 
-    @MainActor func testSessionTimeAutomaticReadFollowsNativeWindowVisibility() async {
+    @MainActor func testSessionTimeAutomaticReadFollowsNativeWindowVisibility() async throws {
         _ = NSApplication.shared
         let visibility = SessionTimeVisibility()
         XCTAssertFalse(visibility.allowsAutomaticRead)
         let window = NSWindow(contentRect: NSRect(x: 120, y: 120, width: 200, height: 120),
                               styleMask: [.titled, .miniaturizable], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
+        window.level = .floating
         window.contentView = visibility
         defer { window.close() }
         XCTAssertFalse(visibility.allowsAutomaticRead)
 
         window.orderFrontRegardless()
-        await settleWindow()
-        XCTAssertTrue(window.occlusionState.contains(.visible))
+        guard await waitFor({ window.occlusionState.contains(.visible) }) else {
+            throw XCTSkip("WindowServer did not expose the shown fixture window as visible in this test host.")
+        }
         XCTAssertTrue(visibility.allowsAutomaticRead)
 
         window.miniaturize(nil)
-        await settleWindow()
+        _ = await waitFor { window.isMiniaturized }
         XCTAssertTrue(window.isMiniaturized)
         XCTAssertFalse(visibility.allowsAutomaticRead)
 
         window.deminiaturize(nil)
         window.orderFrontRegardless()
-        await settleWindow()
+        _ = await waitFor { visibility.allowsAutomaticRead }
         XCTAssertTrue(visibility.allowsAutomaticRead)
 
         window.orderOut(nil)
-        await settleWindow()
+        _ = await waitFor { !visibility.allowsAutomaticRead }
         XCTAssertFalse(visibility.allowsAutomaticRead)
         window.contentView = nil
         XCTAssertFalse(visibility.allowsAutomaticRead)
@@ -93,7 +95,11 @@ final class BackgroundActivityTests: XCTestCase {
         }
     }
 
-    @MainActor private func settleWindow() async {
-        try? await Task.sleep(for: .milliseconds(150))
+    @MainActor private func waitFor(_ condition: () -> Bool) async -> Bool {
+        for _ in 0..<40 {
+            if condition() { return true }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return condition()
     }
 }

@@ -38,7 +38,7 @@ struct SessionTimeView: View {
         .background(SessionTimeWindowReader(view: visibility).frame(width: 0, height: 0))
         .task {
             // Re-read while visible; unchanged files come from the scan cache.
-            if hasRead, model.sessionTimeSnapshot == nil, visibility.allowsAutomaticRead { await model.refreshSessionTime() }
+            if hasRead, model.sessionTimeSnapshot == nil { await model.refreshSessionTime() }
             while !Task.isCancelled {
                 do { try await Task.sleep(for: .seconds(120)) } catch { return }
                 if hasRead, visibility.allowsAutomaticRead { await model.refreshSessionTime() }
