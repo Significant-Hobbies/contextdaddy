@@ -6,15 +6,22 @@ import Combine
         super.init(appName: "ContextDaddy", busyMessage: "Finish the current context check or management review before checking for updates.")
     }
 
-    func start(model: ContextDaddyModel) {
+    func start(model: ContextDaddyModel, activity: AnyPublisher<Void, Never> = Timer.publish(every: 1, on: .main, in: .common).autoconnect().map { _ in () }.eraseToAnyPublisher()) {
         // The model uses Observation; a lightweight timer also notices native
         // sheets closing and management tasks completing outside a model refresh.
-        let activity = Timer.publish(every: 1, on: .main, in: .common).autoconnect().map { _ in () }.eraseToAnyPublisher()
-        start(observing: activity) { [weak model] in
+        let isIdle = { [weak model] in
             guard let model else { return false }
             return model.activeWorkDescription == nil && ContextUpdateActivity.operations == 0
                 && NSApplication.shared.modalWindow == nil
                 && !NSApplication.shared.windows.contains { $0.attachedSheet != nil }
+        }
+        let busyChecks = PassthroughSubject<Bool, Never>()
+        let changes = activity.map { isIdle() }.merge(with: busyChecks)
+            .removeDuplicates().map { _ in () }.eraseToAnyPublisher()
+        start(observing: changes) {
+            let idle = isIdle()
+            if !idle { busyChecks.send(false) }
+            return idle
         }
     }
 }
