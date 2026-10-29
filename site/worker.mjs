@@ -1,6 +1,8 @@
+import { marketingLocation } from './marketing-redirect.mjs';
 // Site worker: owns context.daddyrad.com end to end.
 // /download retains the manual bootstrap route. /updates/ serves only bundled
-// signed-feed assets; all other paths proxy the existing landing.
+// signed-feed assets. Known marketing routes redirect to DaddyRad; other paths
+// retain the existing Pages proxy.
 import release from './release.json' with { type: 'json' };
 
 const PAGES_HOST = 'contextdaddy-landing.pages.dev';
@@ -20,6 +22,8 @@ export default {
     if (url.hostname !== 'context.daddyrad.com') {
       return new Response('Not found', { status: 404 });
     }
+    const marketing = marketingLocation(url.pathname, url.search, 'context');
+    if (marketing) return Response.redirect(marketing, 308);
     if (url.pathname === '/download') {
       const assetURL = new URL(request.url);
       assetURL.pathname = release.path;
