@@ -6,6 +6,16 @@ import Testing
 
 @MainActor
 struct UsageAllowanceViewTests {
+    @Test func checkedTimeIsVisibleForFreshStaleAndFractionalReadings() throws {
+        let status = try JSONDecoder().decode(ProviderQuotaStatus.self, from: Data(#"{"provider":"claude","status":"ready","source":"fixture","checked_at":"2026-11-07T13:00:00.123Z","windows":[]}"#.utf8))
+        let checked = try #require(AllowanceAutoCheckPolicy.checkDate(status.checkedAt))
+        let fresh = UsageAllowanceView.freshnessText(status, now: checked.addingTimeInterval(899))
+        #expect(fresh.hasPrefix("Checked "))
+        #expect(!fresh.contains("unavailable"))
+        #expect(!fresh.contains("refresh needed"))
+        #expect(UsageAllowanceView.freshnessText(status, now: checked.addingTimeInterval(900)).contains("refresh needed"))
+    }
+
     @Test func rendersThreeProviderComparisonAndGrokFailureStates() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
         let directory = root.appendingPathComponent("artifacts/design/provider-comparison/after")
