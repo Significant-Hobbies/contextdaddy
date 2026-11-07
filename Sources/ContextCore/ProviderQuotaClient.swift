@@ -503,7 +503,13 @@ enum ProviderQuotaParser {
                     while index < bytes.count {
                         let next = bytes[index]
                         index += 1
-                        if (0x40...0x7e).contains(next) { break }
+                        if (0x40...0x7e).contains(next) {
+                            // Redraws reposition/erase before writing a new row.
+                            // Keep its heading separate from earlier UI text.
+                            if [0x41, 0x42, 0x45, 0x46, 0x47, 0x48, 0x4a, 0x4b, 0x64, 0x66].contains(next),
+                               output.last != 0x0a { output.append(0x0a) }
+                            break
+                        }
                     }
                 } else if kind == 0x5d { // OSC: ESC ] ... BEL or ESC \
                     while index < bytes.count {
