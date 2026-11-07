@@ -446,7 +446,7 @@ struct SessionTimeView: View {
     }
 }
 
-private struct SessionTimeWindowReader: NSViewRepresentable {
+struct SessionTimeWindowReader: NSViewRepresentable {
     let view: SessionTimeVisibility
 
     func makeNSView(context: Context) -> SessionTimeVisibility { view }

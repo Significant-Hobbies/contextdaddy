@@ -126,7 +126,7 @@ final class ContextDaddyModel {
     var autoCheckAllowance = UserDefaults.standard.bool(forKey: "contextDaddyAutoCheckAllowance") {
         didSet { UserDefaults.standard.set(autoCheckAllowance, forKey: "contextDaddyAutoCheckAllowance") }
     }
-    var lastAllowanceCheckAttempt = UserDefaults.standard.object(forKey: "contextDaddyLastAllowanceCheckAttempt") as? Date
+    var lastAllowanceCheckAttempt: Date?
     var usageService: UsageService = .codex {
         didSet { usageModel = nil; quotaError = nil }
     }
@@ -167,14 +167,20 @@ final class ContextDaddyModel {
     @ObservationIgnored private var refreshGeneration = UUID()
     @ObservationIgnored private var usageGeneration = UUID()
     @ObservationIgnored private let discover: @Sendable ([URL]) throws -> AIContextDiscoveryReport
+    @ObservationIgnored private let loadQuota: (UsageService) async throws -> ProviderQuotaReceipt
     private let snapshotStore = TelemetrySnapshotStore()
     private let skillActivityStore = SkillActivitySnapshotStore()
 
     init(discover: @escaping @Sendable ([URL]) throws -> AIContextDiscoveryReport = { roots in
         try AIContextDiscovery.discover(configuration: .init(additionalRoots: roots, additionalSkillRoots:
             (UserDefaults.standard.stringArray(forKey: "contextDaddySkillRoots") ?? []).map { URL(fileURLWithPath: $0) }))
+    }, allowanceAutoCheck: Bool? = nil,
+         loadQuota: @escaping (UsageService) async throws -> ProviderQuotaReceipt = { service in
+        try await ProviderQuotaClient().loadQuota(for: service)
     }) {
         self.discover = discover
+        self.loadQuota = loadQuota
+        if let allowanceAutoCheck { self.autoCheckAllowance = allowanceAutoCheck }
     }
 
     var contextMenuStatus: String {
@@ -529,7 +535,7 @@ final class ContextDaddyModel {
         quotaError = nil
         defer { isQuotaLoading = false }
         do {
-            let receipt = try await ProviderQuotaClient().loadQuota(for: service)
+            let receipt = try await loadQuota(service)
             quotaReceipt = receipt
             if let key = service.quotaKey { quotaReceipts[key] = receipt; quotaErrors[key] = nil }
         } catch {
@@ -542,7 +548,6 @@ final class ContextDaddyModel {
     func refreshAllQuotas() async {
         guard !isQuotaLoading else { return }
         lastAllowanceCheckAttempt = Date()
-        UserDefaults.standard.set(lastAllowanceCheckAttempt, forKey: "contextDaddyLastAllowanceCheckAttempt")
         await refreshQuotas(for: [.codex, .claude, .grok])
     }
 
@@ -554,7 +559,7 @@ final class ContextDaddyModel {
         for service in services {
             guard let key = service.quotaKey else { continue }
             do {
-                quotaReceipts[key] = try await ProviderQuotaClient().loadQuota(for: service)
+                quotaReceipts[key] = try await loadQuota(service)
                 quotaErrors[key] = nil
             } catch {
                 quotaErrors[key] = error.localizedDescription
@@ -562,9 +567,10 @@ final class ContextDaddyModel {
         }
     }
 
-    func autoRefreshQuotasIfNeeded(now: Date = Date()) async {
+    func autoRefreshQuotasIfNeeded(now: Date = Date(), isVisible: Bool = true, isActive: Bool = true) async {
         guard AllowanceAutoCheckPolicy.shouldCheck(enabled: autoCheckAllowance,
-                                                  lastAttempt: lastAllowanceCheckAttempt, now: now),
+                                                  lastAttempt: lastAllowanceCheckAttempt, now: now,
+                                                  isVisible: isVisible, isActive: isActive),
               !isQuotaLoading else { return }
         await refreshAllQuotas()
     }

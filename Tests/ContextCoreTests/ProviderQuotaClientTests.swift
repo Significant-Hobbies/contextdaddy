@@ -3,6 +3,16 @@ import Testing
 @testable import ContextCore
 
 struct ProviderQuotaClientTests {
+    @Test func claudeModelSpecificRedrawKeepsTheAllModelWeeklyReading() throws {
+        let stream = "Current session\r\n11% 11% used\r\nResets 8:10pm (Asia/Calcutta)\r\nCurrent week (all models)\r\n87% 87% used\r\nResets Nov 8 at 5:30pm (Asia/Calcutta)\r\nWhat's contributing to your usage?\r\nScanning local sessions…\r\nRefreshing…\r\nEsc to cancel\u{001b}[29G\u{001b}[17A\u{001b}[17B\u{001b}[2K\u{001b}[1A\u{001b}[2K\u{001b}[GCurrent week (Fable)\r\n0% 0% used\r\nResets Nov 8 at 5:30pm (Asia/Calcutta)\r\nUsage credits\r\n4% 3% used\r\n$54.84 / $1,500.00 spent"
+        let status = try ProviderQuotaParser.claude(ProviderQuotaParser.cleanTerminal(stream))
+        #expect(status.windows.first(where: { $0.id == "current" })?.remainingPercent == 89)
+        #expect(status.windows.first(where: { $0.id == "weekly" })?.remainingPercent == 13)
+        #expect(status.windows.first(where: { $0.id == "weekly_model_fable" })?.remainingPercent == 100)
+        #expect(status.credits?.usedAmount == 54.84)
+        #expect(status.credits?.limitAmount == 1500)
+    }
+
     @Test func grokAuthenticationFailureIsExplicitWithoutReturningProviderDetails() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)

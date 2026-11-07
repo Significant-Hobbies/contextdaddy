@@ -6,6 +6,8 @@ import SaaSMakerUI
 /// one focal number; providers without one collapse to a single quiet line.
 struct UsageAllowanceView: View {
     @Environment(ContextDaddyModel.self) private var model
+    @Environment(\.scenePhase) private var scenePhase
+    @State private var visibility = SessionTimeVisibility()
     let stacked: Bool
     /// Focal number beside its detail list; below it when the page is narrow.
     var sideBySide = true
@@ -40,18 +42,30 @@ struct UsageAllowanceView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             VStack(alignment: .leading, spacing: 4) {
-                Toggle("check allowances when opening usage", isOn: $model.autoCheckAllowance)
+                Toggle("keep allowances current while viewing usage", isOn: $model.autoCheckAllowance)
                     .font(.caption).toggleStyle(.switch).controlSize(.small)
-                    .onChange(of: model.autoCheckAllowance) { _, enabled in
-                        if enabled { Task { await model.autoRefreshQuotasIfNeeded() } }
-                    }
-                Text("Separate from local token history. Checks use each provider's existing sign-in; automatic checks are opt-in and run at most every 15 minutes.")
+                Text("Separate from local token history. Checks use each provider's existing sign-in. Automatic checks are opt-in, run at most every 15 minutes, and pause when Usage is hidden or the app is inactive.")
                     .font(.caption2).foregroundStyle(DaddyTheme.muted)
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .task { await model.autoRefreshQuotasIfNeeded() }
+        .background(SessionTimeWindowReader(view: visibility).frame(width: 0, height: 0))
+        .task(id: model.autoCheckAllowance && scenePhase == .active) {
+            guard model.autoCheckAllowance, scenePhase == .active else { return }
+            while !Task.isCancelled {
+                await model.autoRefreshQuotasIfNeeded(isVisible: visibility.allowsAutomaticRead,
+                                                     isActive: scenePhase == .active)
+                do { try await Task.sleep(for: .seconds(60)) }
+                catch { return }
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didChangeOcclusionStateNotification)) { _ in
+            Task {
+                await model.autoRefreshQuotasIfNeeded(isVisible: visibility.allowsAutomaticRead,
+                                                     isActive: scenePhase == .active)
+            }
+        }
     }
 
     @ViewBuilder private var checkAllControl: some View {
@@ -76,14 +90,23 @@ struct UsageAllowanceView: View {
         let ready = readyStatus(provider)
         let error = model.quotaErrors[provider]
         return VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(provider).font(.system(size: 17, weight: .bold, design: .rounded))
-                if let plan = status?.plan {
-                    Text(plan).font(.caption).foregroundStyle(DaddyTheme.muted).lineLimit(1)
+            TimelineView(.periodic(from: .now, by: 60)) { context in
+                VStack(alignment: .leading, spacing: 5) {
+                    HStack(alignment: .firstTextBaseline, spacing: 8) {
+                        Text(provider).font(.system(size: 17, weight: .bold, design: .rounded))
+                        if let plan = status?.plan {
+                            Text(plan).font(.caption).foregroundStyle(DaddyTheme.muted).lineLimit(1)
+                        }
+                        Spacer(minLength: 8)
+                        Text(stateText(provider, now: context.date)).font(.caption.weight(.semibold))
+                            .foregroundStyle(stateColor(provider, now: context.date))
+                    }
+                    if let status {
+                        Text(Self.freshnessText(status, now: context.date))
+                            .font(.caption).foregroundStyle(DaddyTheme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
-                Spacer(minLength: 8)
-                Text(stateText(provider)).font(.caption.weight(.semibold))
-                    .foregroundStyle(stateColor(provider))
             }
             if let ready {
                 if sideBySide {
@@ -227,17 +250,25 @@ struct UsageAllowanceView: View {
         return status
     }
 
-    private func stateText(_ provider: String) -> String {
+    private func stateText(_ provider: String, now: Date) -> String {
         let remaining = readyStatus(provider).flatMap { Self.focalWindow($0)?.remainingPercent }
         if model.quotaErrors[provider] != nil { return readyStatus(provider) == nil ? "unavailable" : "stale" }
+        if let status = readyStatus(provider), AllowanceAutoCheckPolicy.isStale(checkedAt: status.checkedAt, now: now) { return "stale" }
         if readyStatus(provider) == nil { return "no reading" }
         return remaining.map { health($0).0 } ?? "ready"
     }
 
-    private func stateColor(_ provider: String) -> Color {
+    private func stateColor(_ provider: String, now: Date) -> Color {
         if model.quotaErrors[provider] != nil { return DaddyTheme.amber }
+        if let status = readyStatus(provider), AllowanceAutoCheckPolicy.isStale(checkedAt: status.checkedAt, now: now) { return DaddyTheme.amber }
         let remaining = readyStatus(provider).flatMap { Self.focalWindow($0)?.remainingPercent }
         return remaining.map { health($0).1 } ?? DaddyTheme.muted
+    }
+
+    static func freshnessText(_ status: ProviderQuotaStatus, now: Date) -> String {
+        let checked = AllowanceAutoCheckPolicy.checkDate(status.checkedAt)
+        let label = checked.map { "Checked \($0.formatted(date: .abbreviated, time: .shortened))" } ?? "Check time unavailable"
+        return AllowanceAutoCheckPolicy.isStale(checkedAt: status.checkedAt, now: now) ? "\(label) · refresh needed" : label
     }
 
     static func windowKind(_ window: ProviderQuotaWindow) -> String {

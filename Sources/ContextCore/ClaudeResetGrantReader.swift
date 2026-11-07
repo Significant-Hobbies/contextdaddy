@@ -184,8 +184,8 @@ struct ClaudeResetGrantReader: Sendable {
             let five_hour: Window
             let seven_day: Window
         }
-        let summary = try parse(data, now: now)
-        guard let reading = try? JSONDecoder().decode(Windows.self, from: data) else {
+        guard data.count <= 256 * 1024,
+              let reading = try? JSONDecoder().decode(Windows.self, from: data) else {
             throw ClaudeResetGrantError.unsupportedResponse
         }
         var windows: [ProviderQuotaWindow] = []
@@ -201,24 +201,31 @@ struct ClaudeResetGrantReader: Sendable {
                                                windowDurationMinutes: nil, resetsAtUnix: reset.map { Int64($0.timeIntervalSince1970) },
                                                resetDescription: nil))
         }
+        let summary = try? parse(data, now: now)
         return ProviderQuotaStatus(provider: "claude", status: "ready", source: "Claude OAuth usage (CLI display unavailable)",
-                                   checkedAt: summary.checkedAt, plan: nil, windows: windows, credits: nil,
+                                   checkedAt: ISO8601DateFormatter().string(from: now), plan: nil, windows: windows, credits: nil,
                                    resetCredits: nil, latestReportedResetCreditExpiryUnix: nil,
                                    resetCreditDetailsCount: nil, resetCreditsWithoutExpiryCount: nil,
                                    claudeResetGrants: summary,
-                                   message: "CLI plan and paid-credit details were unavailable. Windows and reset grants were read from Claude's usage endpoint.")
+                                   resetGrantError: summary == nil ? ClaudeResetGrantError.unsupportedResponse.errorDescription : nil,
+                                   message: "CLI plan and paid-credit details were unavailable. Usage windows were read from Claude's usage endpoint.")
     }
 
     static func mergingCLIDetails(_ cli: ProviderQuotaStatus?, into remote: ProviderQuotaStatus) -> ProviderQuotaStatus {
         guard let cli else { return remote }
         // The terminal can show placeholder percentages before its request
         // completes. Keep API windows and grants from one authoritative read.
+        let cliDetails = remote.claudeResetGrants == nil && cli.resetCredits != nil
+            ? "plan, paid credits and reset count" : "plan and paid credits"
         return ProviderQuotaStatus(provider: "claude", status: "ready",
-                                   source: "Claude OAuth usage · windows and resets; Claude Code /usage · plan and paid credits",
+                                   source: remote.claudeResetGrants == nil
+                                       ? "Claude OAuth usage · windows; Claude Code /usage · \(cliDetails)"
+                                       : "Claude OAuth usage · windows and resets; Claude Code /usage · \(cliDetails)",
                                    checkedAt: remote.checkedAt, plan: cli.plan, windows: remote.windows, credits: cli.credits,
-                                   resetCredits: remote.claudeResetGrants.map { $0.fullCount + $0.fiveHourCount },
+                                   resetCredits: remote.claudeResetGrants.map { $0.fullCount + $0.fiveHourCount } ?? cli.resetCredits,
                                    latestReportedResetCreditExpiryUnix: nil, resetCreditDetailsCount: nil,
-                                   resetCreditsWithoutExpiryCount: nil, claudeResetGrants: remote.claudeResetGrants, message: nil)
+                                   resetCreditsWithoutExpiryCount: nil, claudeResetGrants: remote.claudeResetGrants,
+                                   resetGrantError: remote.resetGrantError, message: nil)
     }
 
     private static func isoDate(_ value: String) -> Date? {

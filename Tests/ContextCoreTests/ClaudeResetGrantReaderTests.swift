@@ -115,4 +115,43 @@ struct ClaudeResetGrantReaderTests {
             #expect(throws: ClaudeResetGrantError.self) { try ClaudeResetGrantReader.quotaStatus(Data(invalid.utf8), now: now) }
         }
     }
+
+    @Test func validUsageWindowsSurviveUnavailableOptionalResetGrants() throws {
+        let windows = #""five_hour":{"utilization":20,"resets_at":"2030-10-22T16:00:00Z"},"seven_day":{"utilization":60,"resets_at":null}"#
+        let cli = try ProviderQuotaParser.claude("Current session\n0% used\nResets soon\nCurrent week (all models)\n0% used\nResets later")
+        for grants in ["", #", "cedar_ember":null"#,
+                       #", "cedar_ember":{"eligible":false,"grants":[]}"#,
+                       #", "cedar_ember":{"eligible":true,"grants":[{}]}"#] {
+            let status = try ClaudeResetGrantReader.quotaStatus(Data("{\(windows)\(grants)}".utf8), now: now)
+            #expect(status.windows.map(\.remainingPercent) == [80, 40])
+            #expect(status.claudeResetGrants == nil)
+            #expect(status.resetCredits == nil)
+            #expect(status.resetGrantError != nil)
+            let merged = ClaudeResetGrantReader.mergingCLIDetails(cli, into: status)
+            #expect(merged.windows.map(\.remainingPercent) == [80, 40])
+            #expect(merged.resetGrantError == status.resetGrantError)
+            #expect(merged.resetCredits == nil)
+        }
+    }
+
+    @Test func reportedCLIResetCountSurvivesUnavailableAPIDetailsButSupportedAPIGrantsWin() throws {
+        let windows = #""five_hour":{"utilization":20,"resets_at":null},"seven_day":{"utilization":60,"resets_at":null}"#
+        let cli = try ProviderQuotaParser.claude("Current session\n0% used\nResets soon\nCurrent week (all models)\n0% used\nResets later\n/limit-reset to refill your limits · 2 resets left · use by Oct 7")
+        let unavailable = try ClaudeResetGrantReader.quotaStatus(Data("{\(windows)}".utf8), now: now)
+        let merged = ClaudeResetGrantReader.mergingCLIDetails(cli, into: unavailable)
+        #expect(merged.windows.map(\.remainingPercent) == [80, 40])
+        #expect(merged.resetCredits == 2)
+        #expect(merged.claudeResetGrants == nil)
+        #expect(merged.resetGrantError == unavailable.resetGrantError)
+        #expect(merged.resetGrantError != nil)
+        #expect(merged.source.contains("Claude Code /usage · plan, paid credits and reset count"))
+        for grants in ["", grant()] {
+            let json = "{\(windows),\"cedar_ember\":{\"eligible\":true,\"grants\":[\(grants)]}}"
+            let remote = try ClaudeResetGrantReader.quotaStatus(Data(json.utf8), now: now)
+            let authoritative = ClaudeResetGrantReader.mergingCLIDetails(cli, into: remote)
+            #expect(authoritative.resetCredits == (grants.isEmpty ? 0 : 1))
+            #expect(authoritative.resetGrantError == nil)
+            #expect(!authoritative.source.contains("reset count"))
+        }
+    }
 }

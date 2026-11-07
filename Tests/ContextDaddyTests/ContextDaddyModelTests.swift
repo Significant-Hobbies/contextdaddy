@@ -5,6 +5,35 @@ import Testing
 
 @MainActor
 struct ContextDaddyModelTests {
+    @Test func allowanceChecksRequireAnActiveVisibleOptedInViewAndRefreshWhenDue() async throws {
+        let receipt = try JSONDecoder().decode(ProviderQuotaReceipt.self, from: Data(#"{"schema_version":"contextdaddy.provider-quota/v1","generated_at":"2026-11-07T13:00:00Z","providers":[]}"#.utf8))
+        var calls: [UsageService] = []
+        let loader: (UsageService) async throws -> ProviderQuotaReceipt = { service in
+            calls.append(service)
+            return receipt
+        }
+        let model = ContextDaddyModel(allowanceAutoCheck: true, loadQuota: loader)
+        #expect(model.lastAllowanceCheckAttempt == nil)
+        await model.autoRefreshQuotasIfNeeded(isVisible: false)
+        await model.autoRefreshQuotasIfNeeded(isActive: false)
+        #expect(calls.isEmpty)
+        await model.autoRefreshQuotasIfNeeded()
+        #expect(calls == [.codex, .claude, .grok])
+        let firstAttempt = try #require(model.lastAllowanceCheckAttempt)
+        await model.autoRefreshQuotasIfNeeded(now: firstAttempt.addingTimeInterval(899))
+        #expect(calls.count == 3)
+        await model.autoRefreshQuotasIfNeeded(now: firstAttempt.addingTimeInterval(900))
+        #expect(calls == [.codex, .claude, .grok, .codex, .claude, .grok])
+
+        let reopened = ContextDaddyModel(allowanceAutoCheck: true, loadQuota: loader)
+        #expect(reopened.lastAllowanceCheckAttempt == nil)
+        await reopened.autoRefreshQuotasIfNeeded()
+        #expect(calls.count == 9)
+        let disabled = ContextDaddyModel(allowanceAutoCheck: false, loadQuota: loader)
+        await disabled.autoRefreshQuotasIfNeeded()
+        #expect(calls.count == 9)
+    }
+
     @Test func decisionDeskNavigationKeepsEvidenceSecondary() {
         let model = ContextDaddyModel()
         #expect(model.section == .overview)
