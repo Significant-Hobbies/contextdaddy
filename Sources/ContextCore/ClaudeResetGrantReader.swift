@@ -215,12 +215,14 @@ struct ClaudeResetGrantReader: Sendable {
         guard let cli else { return remote }
         // The terminal can show placeholder percentages before its request
         // completes. Keep API windows and grants from one authoritative read.
+        let cliDetails = remote.claudeResetGrants == nil && cli.resetCredits != nil
+            ? "plan, paid credits and reset count" : "plan and paid credits"
         return ProviderQuotaStatus(provider: "claude", status: "ready",
                                    source: remote.claudeResetGrants == nil
-                                       ? "Claude OAuth usage · windows; Claude Code /usage · plan and paid credits"
-                                       : "Claude OAuth usage · windows and resets; Claude Code /usage · plan and paid credits",
+                                       ? "Claude OAuth usage · windows; Claude Code /usage · \(cliDetails)"
+                                       : "Claude OAuth usage · windows and resets; Claude Code /usage · \(cliDetails)",
                                    checkedAt: remote.checkedAt, plan: cli.plan, windows: remote.windows, credits: cli.credits,
-                                   resetCredits: remote.claudeResetGrants.map { $0.fullCount + $0.fiveHourCount },
+                                   resetCredits: remote.claudeResetGrants.map { $0.fullCount + $0.fiveHourCount } ?? cli.resetCredits,
                                    latestReportedResetCreditExpiryUnix: nil, resetCreditDetailsCount: nil,
                                    resetCreditsWithoutExpiryCount: nil, claudeResetGrants: remote.claudeResetGrants,
                                    resetGrantError: remote.resetGrantError, message: nil)
