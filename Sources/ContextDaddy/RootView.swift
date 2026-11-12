@@ -85,7 +85,7 @@ struct RootView: View {
             .safeAreaPadding(.top, 18)
             .frame(maxHeight: .infinity, alignment: .top)
             .background(DaddyTheme.canvas)
-            .frame(width: 240)
+            .frame(width: 224)
             Rectangle().fill(DaddyTheme.line).frame(width: 1)
             VStack(spacing: 0) {
                 Group {
@@ -110,7 +110,7 @@ struct RootView: View {
         }
         .task { if refreshOnAppear && !ContextStartupCheck.enabled { await model.refresh() } }
         .contextTheme(DaddyTheme.palette)
-        .font(.custom(DaddyTheme.palette.sansFont, size: 13))
+        .font(.custom(DaddyTheme.palette.sansFont, size: 14))
         .buttonStyle(ContextDaddyButtonStyle())
         .toolbar(.hidden, for: .windowToolbar)
     }
@@ -123,15 +123,15 @@ private struct BrandMark: View {
                 .frame(width: 32, height: 32)
             VStack(alignment: .leading, spacing: 1) {
                 Text("contextdaddy")
-                    .font(.system(size: 16, weight: .bold, design: .rounded))
-                    .tracking(-0.4)
+                    .font(.custom(DaddyTheme.palette.sansFont, size: 16).weight(.semibold))
+                    .tracking(-0.3)
                     .foregroundStyle(Color.white)
                     .lineLimit(1)
                     .minimumScaleFactor(0.8)
                     .fixedSize(horizontal: true, vertical: false)
                     .layoutPriority(2)
                 Text("agent context, explained")
-                    .font(.system(size: 7, weight: .bold, design: .rounded))
+                    .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(DaddyTheme.muted)
                     .lineLimit(1)
                     .minimumScaleFactor(0.75)
@@ -176,7 +176,7 @@ struct ScreenHeader: View {
 
     private var horizontalHeader: some View {
         HStack(alignment: .center, spacing: 22) {
-            headerText(size: 27)
+            headerText(size: 26)
             Spacer(minLength: 12)
             if hero {
                 ContextHeroArt().frame(width: 200, height: 92)
@@ -189,7 +189,7 @@ struct ScreenHeader: View {
 
     private var compactHeader: some View {
         HStack(alignment: .top, spacing: 14) {
-            headerText(size: 22)
+            headerText(size: 24)
             Spacer(minLength: 8)
             ContextDoodleArt(topic: art).frame(width: 46, height: 46)
         }
@@ -199,7 +199,7 @@ struct ScreenHeader: View {
         VStack(alignment: .leading, spacing: 7) {
             SMSectionHeader(eyebrow: eyebrow.isEmpty ? nil : eyebrow.lowercased(), title, size: size)
                 .accessibilityLabel(eyebrow.isEmpty ? title : "\(eyebrow), \(title)")
-            Text(subtitle).font(.subheadline).foregroundStyle(DaddyTheme.muted)
+            Text(subtitle).font(.callout).foregroundStyle(DaddyTheme.muted)
                 .fixedSize(horizontal: false, vertical: true)
         }
     }

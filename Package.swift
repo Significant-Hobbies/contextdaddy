@@ -12,7 +12,7 @@ let package = Package(
         .library(name: "ContextCore", targets: ["ContextCore"]),
         .executable(name: "ContextDaddy", targets: ["ContextDaddy"]),
     ],
-    dependencies: [.package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"), .package(url: "https://github.com/sass-maker/ui-library", from: "0.1.14")],
+    dependencies: [.package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"), .package(url: "https://github.com/sass-maker/ui-library", exact: "0.1.33")],
     targets: [
         .target(name: "ContextCore", linkerSettings: [.linkedLibrary("sqlite3")]),
         .executableTarget(name: "ContextDaddy", dependencies: [.product(name: "SaaSMakerUI", package: "ui-library"), "ContextCore", .product(name: "Sparkle", package: "Sparkle")],

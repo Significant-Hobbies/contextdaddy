@@ -7,7 +7,7 @@ enum DaddyTheme {
     static let canvas = DaddyPalette.canvas
     static let panel = DaddyPalette.canvas
     static let raised = Color(red: 0.055, green: 0.075, blue: 0.066)
-    static let line = mint.opacity(0.2)
+    static let line = muted.opacity(0.18)
     static let muted = DaddyPalette.secondaryInk
     static let mint = DaddyPalette.mint
     static let blue = DaddyPalette.blue
@@ -16,7 +16,7 @@ enum DaddyTheme {
 
     /// Daddy identity over the library's dark preset; evidence keeps its own roles.
     static let palette: SMPalette = {
-        var palette = SMPalette.ink.brand(mint, foreground: .black)
+        var palette = SMPalette.ink.dark.brand(mint, foreground: .black)
         palette.background = canvas
         palette.surface = panel
         palette.card = panel
@@ -27,9 +27,12 @@ enum DaddyTheme {
         palette.success = mint
         palette.warning = amber
         palette.destructive = coral
-        palette.radius = 8
+        palette.radius = 10
+        palette.displayFont = palette.sansFont
+        palette.accent = mint.opacity(0.11)
+        palette.input = line
         palette.displayWeight = 600
-        palette.displayTracking = -0.018
+        palette.displayTracking = -0.025
         palette.textFont = palette.sansFont
         return palette
     }()
@@ -78,8 +81,11 @@ struct Panel<Content: View>: View {
 
 struct ContextDaddyButtonStyle: ButtonStyle {
     var prominent = false
+    @Environment(\.isEnabled) private var isEnabled
     func makeBody(configuration: Configuration) -> some View {
-        DaddyControlStyle(prominent: prominent).makeBody(configuration: configuration)
+        SMButtonStyle(prominent ? .brand : .outline, size: .compact)
+            .makeBody(configuration: configuration)
+            .opacity(isEnabled ? 1 : 0.4)
     }
 }
 
@@ -208,7 +214,7 @@ extension View {
         return environment(\.smPalette, palette)
             .tint(palette.brand)
             .foregroundStyle(palette.foreground)
-            .font(.custom(palette.sansFont, size: 16, relativeTo: .body))
+            .font(.custom(palette.sansFont, size: 14, relativeTo: .body))
             .background(palette.background.ignoresSafeArea())
             .preferredColorScheme(palette.isDark ? .dark : .light)
     }
