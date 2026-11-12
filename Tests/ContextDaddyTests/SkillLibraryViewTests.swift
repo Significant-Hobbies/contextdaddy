@@ -1,3 +1,4 @@
+import SaaSMakerUI
 import AppKit
 @testable import ContextCore
 import SwiftUI
@@ -19,7 +20,7 @@ struct SkillLibraryViewTests {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         for width in [390, 768, 1440] {
             for (name, view) in [("memory", AnyView(MemoryLibraryView(snapshot: snapshot))), ("activity", AnyView(TelemetryView()))] {
-                let host = NSHostingView(rootView: view.environment(model).preferredColorScheme(.dark).background(DaddyTheme.canvas).buttonStyle(ContextDaddyButtonStyle()))
+                let host = NSHostingView(rootView: view.environment(model).preferredColorScheme(.dark).background(DaddyTheme.canvas).buttonStyle(SMButtonStyle(.outline, size: .compact)))
                 host.frame = NSRect(x: 0, y: 0, width: width, height: 1000)
                 let window = NSWindow(contentRect: host.frame, styleMask: [], backing: .buffered, defer: false)
                 window.contentView = host

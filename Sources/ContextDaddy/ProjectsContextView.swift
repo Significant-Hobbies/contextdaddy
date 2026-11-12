@@ -1,3 +1,4 @@
+import SaaSMakerUI
 import AppKit
 import ContextCore
 import SwiftUI
@@ -59,10 +60,10 @@ struct ProjectsContextView: View {
             )
             HStack(spacing: 12) {
                 Button("choose folder…", systemImage: "folder.badge.plus", action: chooseFolder).accessibilityLabel("Choose folder…")
-                    .buttonStyle(ContextDaddyButtonStyle())
+                    .buttonStyle(SMButtonStyle(.outline, size: .compact))
                 if !search.isEmpty {
                     Button("clear search") { search = "" }.accessibilityLabel("Clear search")
-                        .buttonStyle(ContextDaddyButtonStyle())
+                        .buttonStyle(SMButtonStyle(.outline, size: .compact))
                 }
             }
             ViewThatFits(in: .horizontal) {

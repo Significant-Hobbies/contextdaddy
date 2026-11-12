@@ -1,3 +1,4 @@
+import SaaSMakerUI
 import AppKit
 import ContextCore
 import SwiftUI
@@ -148,7 +149,7 @@ struct UsageAllowanceViewTests {
         let view = RootView().environment(model)
             .frame(width: CGFloat(width), height: CGFloat(height), alignment: .topLeading)
             .background(DaddyTheme.canvas).preferredColorScheme(.dark)
-            .tint(DaddyTheme.mint).buttonStyle(ContextDaddyButtonStyle())
+            .tint(DaddyTheme.mint).buttonStyle(SMButtonStyle(.outline, size: .compact))
         let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(x: 0, y: 0, width: width, height: height)
         let window = NSWindow(contentRect: hosting.frame, styleMask: [], backing: .buffered, defer: false)
