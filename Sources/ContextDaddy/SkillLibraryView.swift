@@ -390,7 +390,7 @@ struct SkillLibraryView: View {
         ViewThatFits(in: .horizontal) {
             HStack { addSkillMenu; libraryActions }
             VStack(alignment: .leading, spacing: 8) { addSkillMenu; HStack { libraryActions } }
-        }.buttonStyle(ContextDaddyButtonStyle()).disabled(working)
+        }.buttonStyle(SMButtonStyle(.outline, size: .compact)).disabled(working)
     }
     private var addSkillMenu: some View {
             Menu {
@@ -408,7 +408,7 @@ struct SkillLibraryView: View {
     private var navigation: some View {
         HStack {
                         Button(checked.isEmpty ? "Clean up duplicates" : "Clean up \(checked.count) selected") { openOrganization(.cleanup) }
-        }.buttonStyle(ContextDaddyButtonStyle())
+        }.buttonStyle(SMButtonStyle(.outline, size: .compact))
     }
     private var inventoryAnswers: some View {
         let answers = SkillInventoryAnswers(records: records)
@@ -662,7 +662,7 @@ struct SkillLibraryView: View {
     }
     private var favoritesButton: some View {
         Button { favoriteOnly.toggle() } label: { Label("Favorites", systemImage: favoriteOnly ? "star.fill" : "star") }
-            .buttonStyle(ContextDaddyButtonStyle()).accessibilityValue(favoriteOnly ? "On" : "Off")
+            .buttonStyle(SMButtonStyle(.outline, size: .compact)).accessibilityValue(favoriteOnly ? "On" : "Off")
     }
     @ViewBuilder private var organizationFilters: some View {
         Picker("Scope", selection: $scopeFilter) {
@@ -749,7 +749,7 @@ struct SkillLibraryView: View {
                     Text("\(min(page, pageCount - 1) + 1) / \(pageCount)").font(.caption.monospacedDigit())
                     Spacer()
                     Button("next") { page += 1 }.accessibilityLabel("Next").disabled(page >= pageCount - 1)
-                }.buttonStyle(ContextDaddyButtonStyle()).padding(.top, 12)
+                }.buttonStyle(SMButtonStyle(.outline, size: .compact)).padding(.top, 12)
                 Text("Copies compare instructions only. Cleanup checks the complete folder. Agent access is discovered evidence, not proof of live use.")
                     .font(.caption2).foregroundStyle(DaddyTheme.muted).padding(.top, 10)
             }
@@ -885,7 +885,7 @@ struct SkillLibraryView: View {
             }
             if skill.hasDefinitionConflict {
                 Button("compare copies") { checked = Set(records.filter { $0.name == skill.name || (skill.contentFingerprint != nil && $0.contentFingerprint == skill.contentFingerprint) }.map(\.id)); openOrganization(.cleanup) }.accessibilityLabel("Compare copies")
-                    .buttonStyle(ContextDaddyButtonStyle())
+                    .buttonStyle(SMButtonStyle(.outline, size: .compact))
             }
             if skill.ownership == .local && !ManagedSkillHealth.isManagedPath(skill.id) {
                 ViewThatFits(in: .horizontal) {
@@ -955,7 +955,7 @@ struct SkillLibraryView: View {
         VStack(alignment: .leading, spacing: 12) {
             if let document {
                 Text(document).font(.system(.caption, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading)
-                if skill.ownership == .local && !ManagedSkillHealth.isManagedPath(skill.id) { Button("edit content") { draft = document; editor = true }.accessibilityLabel("Edit content").buttonStyle(ContextDaddyButtonStyle()) }
+                if skill.ownership == .local && !ManagedSkillHealth.isManagedPath(skill.id) { Button("edit content") { draft = document; editor = true }.accessibilityLabel("Edit content").buttonStyle(SMButtonStyle(.outline, size: .compact)) }
             } else {
                 Text("Open SKILL.md explicitly to inspect its instructions. Supporting scripts are never executed.").foregroundStyle(DaddyTheme.muted)
                 Button("read skill.md") {
@@ -964,7 +964,7 @@ struct SkillLibraryView: View {
                         document = result.text
                         if result.truncated { notice = "Preview is truncated to 256 KiB. Editing is unavailable for larger documents." }
                     } catch { self.error = error.localizedDescription }
-                }.accessibilityLabel("Read SKILL.md").buttonStyle(ContextDaddyButtonStyle())
+                }.accessibilityLabel("Read SKILL.md").buttonStyle(SMButtonStyle(.outline, size: .compact))
             }
         }
     }
@@ -984,7 +984,7 @@ struct SkillLibraryView: View {
             }
             Text("Edit SKILL.md to change its declared controls. Codex may also use agents/openai.yaml; global settings and plugin enablement remain with their owning agent.").font(.caption).foregroundStyle(DaddyTheme.muted)
             if skill.ownership == .local && !ManagedSkillHealth.isManagedPath(skill.id) {
-                Button("share to agent or project…") { share(skill) }.accessibilityLabel("Share to agent or project…").buttonStyle(ContextDaddyButtonStyle())
+                Button("share to agent or project…") { share(skill) }.accessibilityLabel("Share to agent or project…").buttonStyle(SMButtonStyle(.outline, size: .compact))
                 ForEach(skill.exposures.filter { $0.logicalPath != $0.resolvedPath }) { exposure in
                     Button("Remove link: \(exposure.logicalPath)") {
                         perform { try await manager.prepareUnlink(path: URL(fileURLWithPath: exposure.logicalPath).deletingLastPathComponent()) }

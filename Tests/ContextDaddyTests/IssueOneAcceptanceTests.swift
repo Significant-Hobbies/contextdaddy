@@ -1,3 +1,4 @@
+import SaaSMakerUI
 import AppKit
 import SwiftUI
 import Testing
@@ -77,7 +78,7 @@ struct IssueOneAcceptanceTests {
     private func render(_ model: ContextDaddyModel, width: Int, height: Int, to destination: URL) throws {
         let hosting = NSHostingView(rootView: RootView(refreshOnAppear: false).environment(model)
             .preferredColorScheme(.dark).background(DaddyTheme.canvas)
-            .tint(DaddyTheme.mint).buttonStyle(ContextDaddyButtonStyle()))
+            .tint(DaddyTheme.mint).buttonStyle(SMButtonStyle(.outline, size: .compact)))
         hosting.frame = NSRect(x: 0, y: 0, width: width, height: height)
         let window = NSWindow(contentRect: hosting.frame, styleMask: [.titled, .closable, .resizable],
             backing: .buffered, defer: false)

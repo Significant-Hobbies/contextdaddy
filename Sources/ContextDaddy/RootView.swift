@@ -111,7 +111,7 @@ struct RootView: View {
         .task { if refreshOnAppear && !ContextStartupCheck.enabled { await model.refresh() } }
         .contextTheme(DaddyTheme.palette)
         .font(.custom(DaddyTheme.palette.sansFont, size: 14))
-        .buttonStyle(ContextDaddyButtonStyle())
+        .buttonStyle(SMButtonStyle(.outline, size: .compact))
         .toolbar(.hidden, for: .windowToolbar)
     }
 }
@@ -534,7 +534,7 @@ private struct SkillRow: View {
             } label: {
                 Label(policy.invocation, systemImage: "doc.on.doc")
             }
-            .buttonStyle(ContextDaddyButtonStyle())
+            .buttonStyle(SMButtonStyle(.outline, size: .compact))
             .help("Copy the exact \(policy.runtime.rawValue) invocation")
         }
     }

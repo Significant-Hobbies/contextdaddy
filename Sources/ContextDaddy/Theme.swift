@@ -79,15 +79,6 @@ struct Panel<Content: View>: View {
     }
 }
 
-struct ContextDaddyButtonStyle: ButtonStyle {
-    var prominent = false
-    @Environment(\.isEnabled) private var isEnabled
-    func makeBody(configuration: Configuration) -> some View {
-        SMButtonStyle(prominent ? .brand : .outline, size: .compact)
-            .makeBody(configuration: configuration)
-            .opacity(isEnabled ? 1 : 0.4)
-    }
-}
 
 enum ContextDoodleTopic: Int {
     case overview = 0

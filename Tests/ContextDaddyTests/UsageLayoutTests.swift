@@ -1,3 +1,4 @@
+import SaaSMakerUI
 import AppKit
 @testable import ContextCore
 import SwiftUI
@@ -82,7 +83,7 @@ struct UsageLayoutTests {
         let view = RootView(refreshOnAppear: false).environment(model)
             .frame(width: CGFloat(width), height: CGFloat(height), alignment: .topLeading)
             .background(DaddyTheme.canvas).preferredColorScheme(.dark)
-            .tint(DaddyTheme.mint).buttonStyle(ContextDaddyButtonStyle())
+            .tint(DaddyTheme.mint).buttonStyle(SMButtonStyle(.outline, size: .compact))
         let hosting = NSHostingView(rootView: view)
         hosting.frame = NSRect(x: 0, y: 0, width: width, height: height)
         let window = NSWindow(contentRect: hosting.frame, styleMask: [.titled, .resizable],
