@@ -40,6 +40,7 @@ struct RootView: View {
                             Text("\(model.configurationHealth.issues.count.formatted()) configuration \(model.configurationHealth.issues.count == 1 ? "issue" : "issues")")
                                 .font(DaddyTheme.type(11)).foregroundStyle(model.configurationHealth.errorCount > 0 ? DaddyTheme.coral : DaddyTheme.amber)
                                 .padding(.leading, 40).padding(.top, 2)
+                                .accessibilityHidden(true)
                         }
                     } footer: {
                         PrivacyFooter()

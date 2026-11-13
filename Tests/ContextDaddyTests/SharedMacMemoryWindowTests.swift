@@ -110,7 +110,7 @@ func sharedMacMemoryWindowEvidence() async throws {
     if let screen = NSScreen.screens.last {
         window.setFrameTopLeftPoint(NSPoint(x: screen.visibleFrame.minX + 24, y: screen.visibleFrame.maxY - 24))
     }
-    // Surface this test window without activating the app or taking keyboard focus.
+    // Default: surface without taking focus. ACTIVATE=1 opts into a key window and activation.
     if ProcessInfo.processInfo.environment["CONTEXTDADDY_MAC_UI_ACTIVATE"] == "1" {
         window.makeKeyAndOrderFront(nil)
     } else {
