@@ -106,7 +106,7 @@ struct ProjectsContextView: View {
                 .id("project-results")
                 ContextPagination(page: $page, total: rows.count, pageSize: pageSize, noun: "projects")
             }
-            .padding(28)
+            .padding(32)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .onChange(of: page) { _, _ in

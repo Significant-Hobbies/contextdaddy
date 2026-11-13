@@ -113,11 +113,26 @@ struct SkillLibraryView: View {
                     header
                     folderControl
                     if folderLoading { ProgressView("Reading this folder…") }
-                    else {
-                        inventoryAnswers
-                        sourceAuditSummary
-                        activitySummary
-                        DisclosureGroup("Where these skills come from", isExpanded: $locationsExpanded) {
+                    if model.catalog != nil || model.skillFolderContext != nil {
+                        let answers = SkillInventoryAnswers(records: records)
+                        HStack(spacing: 8) {
+                            Text("\(answers.local.count.formatted()) local definitions").foregroundStyle(DaddyTheme.ink)
+                            Text("· \(answers.uniqueNames.formatted()) unique names").foregroundStyle(DaddyTheme.muted)
+                        }.font(DaddyTheme.type(12))
+                    }
+                    if showsGuide && contentWidth >= 1180 {
+                        HStack(alignment: .top, spacing: 20) {
+                            workspace(width: contentWidth - 364, scroll: scroll)
+                            guide(scroll: scroll).frame(width: 280)
+                        }
+                    } else {
+                        if showsGuide { guide(scroll: scroll) }
+                        workspace(width: contentWidth - 64, scroll: scroll)
+                    }
+                    DisclosureGroup("Library coverage & counts") { inventoryAnswers.padding(.top, 12) }
+                    DisclosureGroup("Source audit") { sourceAuditSummary.padding(.top, 12) }
+                    DisclosureGroup("Recorded skill activity") { activitySummary.padding(.top, 12) }
+                    DisclosureGroup("Where these skills come from", isExpanded: $locationsExpanded) {
                         SkillLocationMapView(records: ownedRecords) { path, ids in
                             query = ""; agent = nil; location = nil
                             scopeFilter = nil; invocationFilter = nil; favoriteOnly = false
@@ -128,19 +143,9 @@ struct SkillLibraryView: View {
                             checked = ids
                             openOrganization(.cleanup)
                         }
-                        }.font(.callout)
-                    }
-                    if showsGuide && contentWidth >= 1180 {
-                        HStack(alignment: .top, spacing: 20) {
-                            workspace(width: contentWidth - 344, scroll: scroll)
-                            guide(scroll: scroll).frame(width: 280)
-                        }
-                    } else {
-                        if showsGuide { guide(scroll: scroll) }
-                        workspace(width: contentWidth - 44, scroll: scroll)
-                    }
+                    }.font(DaddyTheme.type(12))
                 }
-                .padding(22)
+                .padding(32)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
@@ -338,16 +343,10 @@ struct SkillLibraryView: View {
     }
 
     private var header: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack {
-                SMDisplay("skills", size: 22).accessibilityLabel("Skills")
-                Spacer()
-                simpleActions
-            }
-            VStack(alignment: .leading, spacing: 10) {
-                SMDisplay("skills", size: 22).accessibilityLabel("Skills")
-                simpleActions
-            }
+        VStack(alignment: .leading, spacing: 18) {
+            ScreenHeader(eyebrow: "Your working library", title: "Skills",
+                subtitle: "Find the right skill. Understand who can use it, then make changes with a preview.", art: .skills)
+            simpleActions
         }
     }
 

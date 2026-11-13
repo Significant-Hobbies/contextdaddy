@@ -7,6 +7,7 @@ struct MemoryLibraryView: View {
     @Environment(ContextDaddyModel.self) private var model
     @AppStorage("skillWorkingFolder") private var folder = ""
     @State private var folderInput = ""
+    @State private var scopeExpanded = false
     @State private var snapshot: MemoryInventory?
     @State private var query = ""
     @State private var agent: AgentRuntime?
@@ -26,10 +27,11 @@ struct MemoryLibraryView: View {
     @State private var page = 0
     @State private var manager: MemoryDocumentManager
     private let fixture: MemoryInventory?
-    init(snapshot: MemoryInventory? = nil, manager: MemoryDocumentManager = MemoryDocumentManager()) {
+    init(snapshot: MemoryInventory? = nil, manager: MemoryDocumentManager = MemoryDocumentManager(), initialSelection: MemoryEntry? = nil) {
         fixture = snapshot
         _snapshot = State(initialValue: snapshot)
         _manager = State(initialValue: manager)
+        _selected = State(initialValue: initialSelection)
     }
     private var matches: [MemoryEntry] {
         (snapshot?.entries ?? []).filter {
@@ -40,41 +42,51 @@ struct MemoryLibraryView: View {
     }
     var body: some View {
         GeometryReader { geometry in
-            let width = max(250, geometry.size.width - 64)
+            let gutter: CGFloat = geometry.size.width < 740 ? 24 : 32
+            let width = max(250, geometry.size.width - gutter * 2)
             ScrollViewReader { proxy in
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 18) {
-                        SMWorkspaceHeader("memory", subtitle: "See what agents can remember. Keep the useful context.") {
-                            actions
-                        }
+                    VStack(alignment: .leading, spacing: 20) {
+                        ScreenHeader(eyebrow: "Your agents’ context", title: "Memory",
+                            subtitle: "Keep the useful context. Review what your agents can remember.", art: .sources,
+                            compact: width < 760)
                         folderControls
                         if loading { ProgressView("Finding instructions and saved memory…") }
                         if let failure { Text(failure).foregroundStyle(DaddyTheme.amber).textSelection(.enabled) }
                         if let snapshot {
                             summary(snapshot)
-                            filters
+                            filters(width: width)
                             if let agent, [.cursor, .devin, .grok].contains(agent) {
-                                Text("\(agent.rawValue): local formats only. Managed memory and shared AGENTS.md loading are not fully resolved; an empty list does not mean this agent has no memory.").font(.callout).foregroundStyle(DaddyTheme.amber)
+                                Text("\(agent.rawValue): local formats only. Managed memory and shared AGENTS.md loading are not fully resolved; an empty list does not mean this agent has no memory.")
+                                    .font(DaddyTheme.type(12)).foregroundStyle(DaddyTheme.amber)
                             }
                             if matches.isEmpty {
-                                Text("No matching local documents in the checked sources. Managed or cloud memory may still exist.").foregroundStyle(DaddyTheme.muted)
-                            } else if width >= 1050 && selected != nil {
-                                HStack(alignment: .top, spacing: 20) { ledger.frame(width: width - 390); if let selected { inspector(selected).frame(width: 370).id("memory-detail") } }
+                                ContentUnavailableView("No matching documents", systemImage: "doc.text.magnifyingglass",
+                                    description: Text("Try another search or scope. Managed or cloud memory may still exist."))
+                            } else if width >= 870 && selected != nil {
+                                HStack(alignment: .top, spacing: 28) {
+                                    ledger.frame(width: width - 340)
+                                    if let selected { inspector(selected).frame(width: 312).id("memory-detail") }
+                                }
                             } else {
                                 ledger
                                 if let selected { inspector(selected).id("memory-detail") }
                             }
-                            DisclosureGroup("Coverage and agent differences") {
+                            comparisonTools
+                            DisclosureGroup("Coverage & agent differences") {
                                 VStack(alignment: .leading, spacing: 10) {
-                                    ForEach(snapshot.notes, id: \.self) { Text($0).font(.callout).foregroundStyle(DaddyTheme.muted) }
+                                    ForEach(snapshot.notes, id: \.self) { Text($0).font(DaddyTheme.type(12)).foregroundStyle(DaddyTheme.muted) }
                                     Text("Checked \(snapshot.checkedAt.formatted())").font(.caption)
-                                    Text("Claude: use /memory to verify its active memory directory. Cursor: use its Rules settings. Devin: review Knowledge in Devin. Grok: memory activation is not verified here.").font(.callout)
-                                }.padding(.top, 10)
+                                    Text("Claude: use /memory to verify its active memory directory. Cursor: use its Rules settings. Devin: review Knowledge in Devin. Grok: memory activation is not verified here.").font(DaddyTheme.type(12))
+                                }.padding(.top, 12)
                             }
+                            .font(DaddyTheme.type(12)).foregroundStyle(DaddyTheme.muted)
                         }
-                    }.padding(32).frame(width: width + 64, alignment: .leading)
-                }.frame(width: geometry.size.width, height: geometry.size.height).clipped()
-                    .onChange(of: selected?.id) { _, id in if id != nil && width < 1050 { proxy.scrollTo("memory-detail", anchor: .top) } }
+                    }
+                    .padding(gutter).frame(width: width + gutter * 2, alignment: .leading)
+                }
+                .frame(width: geometry.size.width, height: geometry.size.height).clipped()
+                .onChange(of: selected?.id) { _, id in if id != nil && width < 870 { proxy.scrollTo("memory-detail", anchor: .top) } }
             }
         }
         .task(id: folder + "#" + String(revision)) { folderInput = folder; await refresh() }
@@ -87,115 +99,197 @@ struct MemoryLibraryView: View {
         .sheet(isPresented: $historyOpen) { MemoryHistorySheet(manager: manager, changed: recheck) }
     }
     private var actions: some View {
-        HStack { Button("history") { historyOpen = true }.accessibilityLabel("History"); Button("recheck", action: recheck).accessibilityLabel("Recheck").disabled(loading || model.isLoading) }
+        HStack(spacing: 8) {
+            Button("History", systemImage: "clock.arrow.circlepath") { historyOpen = true }
+            Button("Recheck", systemImage: "arrow.clockwise", action: recheck).disabled(loading || model.isLoading)
+        }
     }
     private var folderControls: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            TextField("Folder path · leave empty for discovered projects", text: $folderInput).textFieldStyle(.roundedBorder)
-                .onSubmit { folder = (folderInput as NSString).expandingTildeInPath }
-            HStack {
-                Button("inspect folder") { folder = (folderInput as NSString).expandingTildeInPath }.accessibilityLabel("Inspect folder")
-                Menu("Choose folder") {
-                    Button("browse…") {
-                        let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
-                        if panel.runModal() == .OK, let url = panel.url { folder = url.path }
-                    }.accessibilityLabel("Browse…")
-                    Button("all discovered projects") { folder = "" }.accessibilityLabel("All discovered projects")
-                    ForEach(Array(model.projects.prefix(20))) { project in Button(project.name) { folder = project.path } }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 16) {
+                DisclosureGroup(isExpanded: $scopeExpanded) {
+                    VStack(alignment: .leading, spacing: 12) {
+                        folderField
+                        folderActions
+                        Text(folder.isEmpty ? "Discovered instruction locations and default saved-memory stores." : "Folder instructions and saved stores. Saved-store folder mapping is unverified.")
+                            .font(DaddyTheme.type(11)).foregroundStyle(DaddyTheme.muted)
+                    }.padding(.top, 12)
+                } label: {
+                    VStack(alignment: .leading, spacing: 5) {
+                        Text("FOLDER SCOPE").font(DaddyTheme.type(10, .medium)).tracking(1.2).foregroundStyle(DaddyTheme.muted)
+                        Text(folder.isEmpty ? "All discovered projects" : (folder as NSString).lastPathComponent)
+                            .font(DaddyTheme.type(12, .medium)).foregroundStyle(DaddyTheme.ink)
+                            .lineLimit(1).truncationMode(.middle).help(folder.isEmpty ? "All discovered projects" : shortPath(folder))
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                actions.fixedSize()
             }
-            Text(folder.isEmpty ? "All discovered instruction locations + default saved-memory stores" : "Instructions for this folder + saved stores with unverified folder mapping")
-                .font(.caption).foregroundStyle(DaddyTheme.muted)
+        }
+    }
+    private var folderField: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "folder").foregroundStyle(DaddyTheme.mint)
+            TextField("Folder path · empty for discovered projects", text: $folderInput)
+                .textFieldStyle(.plain).font(DaddyTheme.type(12))
+                .onSubmit { folder = (folderInput as NSString).expandingTildeInPath }
+        }
+        .padding(.horizontal, 12).frame(minWidth: 230, minHeight: 38)
+        .background(DaddyTheme.raised.opacity(0.45), in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(DaddyTheme.line))
+        .accessibilityLabel("Folder path")
+    }
+    private var folderActions: some View {
+        HStack(spacing: 8) {
+            Button("Inspect") { folder = (folderInput as NSString).expandingTildeInPath }.accessibilityLabel("Inspect folder")
+            Menu("Choose folder") {
+                Button("Browse…") {
+                    let panel = NSOpenPanel(); panel.canChooseDirectories = true; panel.canChooseFiles = false; panel.allowsMultipleSelection = false
+                    if panel.runModal() == .OK, let url = panel.url { folder = url.path }
+                }
+                Button("All discovered projects") { folder = "" }
+                ForEach(Array(model.projects.prefix(20))) { project in Button(project.name) { folder = project.path } }
+            }.fixedSize()
         }
     }
     private func summary(_ snapshot: MemoryInventory) -> some View {
-        SMSettingsGroup {
-            VStack(alignment: .leading, spacing: 8) {
-                let saved = snapshot.entries.filter { $0.category == "Saved memory" }.count
-                Text("\(snapshot.entries.count - saved) instruction & rule files · \(saved) saved-memory files").font(.headline)
-                Text("Start with the largest files below. Open a document to remove stale guidance, or compare exact copies before deciding what to keep.").font(.callout).foregroundStyle(DaddyTheme.muted)
-                Button(comparing ? "Comparing…" : "Compare document contents for duplicates") { Task { await compare() } }.disabled(comparing || loading)
-                Text("Comparison reads up to 256 KiB per document locally. Contents are never sent to a service.").font(.caption).foregroundStyle(DaddyTheme.muted)
-                if let compareNote { Text(compareNote).font(.caption).foregroundStyle(DaddyTheme.amber) }
-            }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
+        let saved = snapshot.entries.filter { $0.category == "Saved memory" }.count
+        return ViewThatFits(in: .horizontal) {
+            HStack(spacing: 20) {
+                memoryCount(snapshot.entries.count - saved, title: "instructions & rules")
+                memoryCount(saved, title: "saved-memory files")
+                Spacer(minLength: 0)
+            }
+            VStack(alignment: .leading, spacing: 10) {
+                memoryCount(snapshot.entries.count - saved, title: "instructions & rules")
+                memoryCount(saved, title: "saved-memory files")
+            }
+        }
+        .padding(.vertical, 10)
+        .overlay(alignment: .top) { Rectangle().fill(DaddyTheme.line).frame(height: 1) }
+        .overlay(alignment: .bottom) { Rectangle().fill(DaddyTheme.line).frame(height: 1) }
+    }
+    private func memoryCount(_ count: Int, title: String) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            Text(count.formatted()).font(DaddyTheme.type(14, .semibold)).monospacedDigit().foregroundStyle(DaddyTheme.ink)
+            Text(title).font(DaddyTheme.type(12)).foregroundStyle(DaddyTheme.muted)
         }
     }
-    private var filters: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            SMSearchField("Search filenames, folders or agents", text: $query)
-            ViewThatFits(in: .horizontal) {
-                HStack { agentPicker; typePicker }
-                VStack(alignment: .leading) { agentPicker; typePicker }
+    private var comparisonTools: some View {
+        DisclosureGroup("Compare document contents") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Find identical contents before deciding what to keep. Separate projects may intentionally use the same guidance.")
+                    .font(DaddyTheme.type(12)).foregroundStyle(DaddyTheme.muted)
+                Button(comparing ? "Comparing…" : "Find exact copies", systemImage: "doc.on.doc") { Task { await compare() } }
+                    .disabled(comparing || loading)
+                Text("Reads up to 256 KiB per document locally. Contents never leave this Mac.")
+                    .font(DaddyTheme.type(11)).foregroundStyle(DaddyTheme.muted)
+                if let compareNote { Text(compareNote).font(.caption).foregroundStyle(DaddyTheme.amber) }
+            }.padding(.top, 12)
+        }
+        .font(DaddyTheme.type(12)).foregroundStyle(DaddyTheme.muted)
+    }
+    private func filters(width: CGFloat) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if width >= 850 {
+                HStack(spacing: 12) {
+                    SMSearchField("Find a document, folder or agent", text: $query)
+                    agentPicker
+                    typePicker
+                }
+            } else {
+                SMSearchField("Find a document, folder or agent", text: $query)
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 12) { agentPicker; typePicker; Spacer(minLength: 0) }
+                    VStack(alignment: .leading, spacing: 10) { agentPicker; typePicker }
+                }
             }
             if duplicatePaths != nil { Toggle("Exact copies only", isOn: $duplicatesOnly).toggleStyle(.checkbox) }
         }
     }
-    private var agentPicker: some View { Picker("Agent", selection: $agent) { Text("All agents").tag(AgentRuntime?.none); ForEach(AgentRuntime.allCases) { Text($0.rawValue).tag(Optional($0)) } }.frame(maxWidth: 240) }
-    private var typePicker: some View { Picker("Type", selection: $kind) { ForEach(["All types", "Instructions", "Rule", "Saved memory"], id: \.self) { Text($0) } }.frame(maxWidth: 240) }
+    private var agentPicker: some View { ContextChoiceMenu(title: "Agent", selection: $agent, choices: [ContextChoice<AgentRuntime?>(nil, "All agents")] + AgentRuntime.allCases.map { ContextChoice<AgentRuntime?>($0, $0.rawValue) }, width: 176) }
+    private var typePicker: some View { ContextChoiceMenu(title: "Type", selection: $kind, choices: ["All types", "Instructions", "Rule", "Saved memory"].map { ContextChoice($0, $0) }, width: 176) }
     private var ledger: some View {
-        SMSettingsGroup {
-            VStack(alignment: .leading, spacing: 0) {
-                Text("\(matches.count) documents · largest first")
-                    .font(.caption).foregroundStyle(DaddyTheme.muted).padding(16)
-                Divider()
-                ForEach(Array(matches.dropFirst(page * 8).prefix(8))) { entry in
-                    Button { selected = entry } label: {
-                        VStack(alignment: .leading, spacing: 0) {
-                            SMResourceRow(entry.name, subtitle: shortPath(entry.path), systemImage: "doc.text") {
-                                EmptyView()
-                            } trailing: {
-                                VStack(alignment: .trailing, spacing: 5) {
-                                    Text(ByteCountFormatter.string(fromByteCount: entry.bytes, countStyle: .file))
-                                        .font(.callout.weight(.medium)).monospacedDigit()
-                                    Text("\(entry.agent?.rawValue ?? "Other") · \(entry.category)")
-                                        .font(.caption).foregroundStyle(DaddyTheme.muted)
-                                }
-                            }
-                            if duplicatePaths?.contains(entry.path) == true {
-                                Text("Exact content copy found · review scope before changing")
-                                    .font(.caption).foregroundStyle(DaddyTheme.amber)
-                                    .padding(.horizontal, 16).padding(.bottom, 12)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(selected?.id == entry.id ? DaddyTheme.mint.opacity(0.10) : .clear)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityAddTraits(selected?.id == entry.id ? .isSelected : [])
-                    Divider()
-                }
-                HStack {
-                    Button("previous") { page -= 1; selected = nil }.accessibilityLabel("Previous").disabled(page == 0)
-                    Spacer()
-                    Text("\(page + 1) / \(max(1, (matches.count + 7) / 8))").font(.caption).monospacedDigit()
-                    Spacer()
-                    Button("next") { page += 1; selected = nil }.accessibilityLabel("Next").disabled((page + 1) * 8 >= matches.count)
-                }.padding(16)
+        VStack(alignment: .leading, spacing: 0) {
+            HStack {
+                Text("DOCUMENT / LOCATION").tracking(1.1)
+                Spacer()
+                Text("LARGEST FIRST").tracking(1.1)
             }
+            .font(DaddyTheme.type(10, .medium)).foregroundStyle(DaddyTheme.muted)
+            .padding(.bottom, 14)
+            Rectangle().fill(DaddyTheme.line).frame(height: 1)
+            ForEach(Array(matches.dropFirst(page * 8).prefix(8))) { entry in
+                Button { selected = entry } label: {
+                    HStack(alignment: .center, spacing: 14) {
+                        Image(systemName: "doc.text")
+                            .font(.system(size: 19, weight: .regular)).foregroundStyle(DaddyTheme.mint)
+                            .frame(width: 36, height: 42)
+                            .background(DaddyTheme.mint.opacity(0.07), in: RoundedRectangle(cornerRadius: 8))
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(entry.name).font(DaddyTheme.type(15, .semibold)).foregroundStyle(DaddyTheme.ink)
+                            Text(shortPath(entry.path)).font(DaddyTheme.type(11)).foregroundStyle(DaddyTheme.muted)
+                                .lineLimit(1).truncationMode(.middle)
+                            if duplicatePaths?.contains(entry.path) == true {
+                                Text("Exact content copy · review scope").font(DaddyTheme.type(10)).foregroundStyle(DaddyTheme.amber)
+                            }
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                        VStack(alignment: .trailing, spacing: 5) {
+                            Text(ByteCountFormatter.string(fromByteCount: entry.bytes, countStyle: .file))
+                                .font(DaddyTheme.type(13, .medium)).monospacedDigit().foregroundStyle(DaddyTheme.ink)
+                            Text("\(entry.agent?.rawValue ?? "Other") · \(entry.category)").font(DaddyTheme.type(11)).foregroundStyle(DaddyTheme.muted)
+                        }
+                        Image(systemName: "chevron.right").font(.system(size: 9, weight: .semibold)).foregroundStyle(DaddyTheme.muted)
+                    }
+                    .padding(.horizontal, 12).padding(.vertical, 18)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(selected?.id == entry.id ? DaddyTheme.mint.opacity(0.08) : .clear)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("\(entry.name), \(entry.agent?.rawValue ?? "Other"), \(entry.category), \(entry.bytes) bytes")
+                .accessibilityAddTraits(selected?.id == entry.id ? .isSelected : [])
+                Rectangle().fill(DaddyTheme.line).frame(height: 1)
+            }
+            HStack(spacing: 12) {
+                Text("\(matches.count.formatted()) documents").font(DaddyTheme.type(11)).foregroundStyle(DaddyTheme.muted)
+                Spacer()
+                Button("Previous", systemImage: "chevron.left") { page -= 1; selected = nil }.disabled(page == 0)
+                Text("\(page + 1) / \(max(1, (matches.count + 7) / 8))").font(DaddyTheme.type(11)).monospacedDigit().foregroundStyle(DaddyTheme.muted)
+                Button("Next", systemImage: "chevron.right") { page += 1; selected = nil }.disabled((page + 1) * 8 >= matches.count)
+            }.padding(.top, 18)
         }
     }
     private func inspector(_ entry: MemoryEntry) -> some View {
-        Panel(padding: 16) {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(entry.name).font(.title2.bold())
-                Text(entry.category).foregroundStyle(DaddyTheme.mint)
-                Text(shortPath(entry.path)).font(.caption.monospaced()).textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
-                Text("\(entry.agent?.rawValue ?? "Unverified agent") · \(entry.scope)").font(.headline)
-                Text(entry.access).font(.callout).foregroundStyle(DaddyTheme.muted)
-                if entry.name.hasPrefix("AGENTS") { Text("Shown under the Codex instruction adapter. Other agents may also support this format; their loading policy is not established by this file alone.").font(.caption).foregroundStyle(DaddyTheme.amber) }
-                Text("Updated \(entry.modified.formatted(date: .abbreviated, time: .shortened)) · not last use").font(.caption).foregroundStyle(DaddyTheme.muted)
-                Button("open document…") { editing = entry }.accessibilityLabel("Open document…")
-                Button("reveal in finder") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: entry.path)]) }.accessibilityLabel("Reveal in Finder")
-                if let group = duplicateGroups.first(where: { $0.contains(where: { $0.id == entry.id }) }) {
-                    SMDisplay("identical contents also at", size: 13).accessibilityLabel("Identical contents also at")
-                    ForEach(group.filter { $0.id != entry.id }) { copy in
-                        Button(shortPath(copy.path)) { selected = copy }.font(.caption).multilineTextAlignment(.leading)
-                    }
+        VStack(alignment: .leading, spacing: 16) {
+            Text("DOCUMENT DETAILS").font(DaddyTheme.type(10, .medium)).tracking(1.3).foregroundStyle(DaddyTheme.muted)
+            Text(entry.name).font(DaddyTheme.heading(23)).foregroundStyle(DaddyTheme.ink)
+            Text(entry.category).font(DaddyTheme.type(12, .medium)).foregroundStyle(DaddyTheme.mint)
+            Text(shortPath(entry.path)).font(.caption.monospaced()).foregroundStyle(DaddyTheme.muted)
+                .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+            Rectangle().fill(DaddyTheme.line).frame(height: 1)
+            Text("\(entry.agent?.rawValue ?? "Unverified agent") · \(entry.scope)").font(DaddyTheme.type(13, .medium)).fixedSize(horizontal: false, vertical: true)
+            Text(entry.access).font(DaddyTheme.type(12)).foregroundStyle(DaddyTheme.muted).lineSpacing(3).fixedSize(horizontal: false, vertical: true)
+            if entry.name.hasPrefix("AGENTS") { Text("Shown under the Codex instruction adapter. Other agents may support this format; their loading policy is not established here.").font(DaddyTheme.type(11)).foregroundStyle(DaddyTheme.amber) }
+            Text("Updated \(entry.modified.formatted(date: .abbreviated, time: .shortened)) · not last use")
+                .font(DaddyTheme.type(11)).foregroundStyle(DaddyTheme.muted).fixedSize(horizontal: false, vertical: true)
+            Button("Open document…", systemImage: "doc.text") { editing = entry }
+                .buttonStyle(SMMacButtonStyle(.primary))
+            Button("Reveal in Finder", systemImage: "arrow.up.forward.square") { NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: entry.path)]) }
+            if let group = duplicateGroups.first(where: { $0.contains(where: { $0.id == entry.id }) }) {
+                Text("IDENTICAL CONTENTS ALSO AT").font(DaddyTheme.type(10, .medium)).tracking(1).foregroundStyle(DaddyTheme.muted)
+                ForEach(group.filter { $0.id != entry.id }) { copy in
+                    Button(shortPath(copy.path)) { selected = copy }.font(.caption).multilineTextAlignment(.leading)
                 }
-                Text("Editing a shared source changes it for every reader. Identical files can intentionally serve separate projects. No automatic merging or access changes.").font(.caption).foregroundStyle(DaddyTheme.muted)
-            }.frame(maxWidth: .infinity, alignment: .leading)
+            }
+            ContextDoodleArt(topic: .sources).frame(width: 116, height: 116).frame(maxWidth: .infinity)
+            Text("Shared sources affect every reader. Changes require your review; History keeps recovery copies.")
+                .font(DaddyTheme.type(11)).foregroundStyle(DaddyTheme.muted).lineSpacing(3)
         }
+        .padding(22)
+        .background(DaddyTheme.canvas)
+        .overlay(alignment: .leading) { Rectangle().fill(DaddyTheme.line).frame(width: 1) }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
     private func reset() { page = 0; selected = nil }
     private func recheck() { Task { if folder.isEmpty { await model.refreshSkillLibrary() }; revision += 1 } }
@@ -255,7 +349,7 @@ private struct MemoryEditorSheet: View {
     @State private var busy = false
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text(plan == nil ? entry.name : "Review document changes").font(.title2.bold())
+            Text(plan == nil ? entry.name : "Review document changes").font(DaddyTheme.heading(24))
             Text(entry.path).font(.caption.monospaced()).textSelection(.enabled)
             if let failure { Text(failure).foregroundStyle(DaddyTheme.amber) }
             if let plan {
@@ -266,17 +360,19 @@ private struct MemoryEditorSheet: View {
                 Text(entry.editable && !truncated ? "Remove stale or repeated guidance. Save requires a preview; History can restore the previous document." : "Read-only source. Manage this file through its owning agent.").font(.caption).foregroundStyle(DaddyTheme.muted)
             } else { ProgressView("Opening document…").frame(maxHeight: .infinity) }
             HStack {
-                Button("close") { dismiss() }.accessibilityLabel("Close").keyboardShortcut(.cancelAction).disabled(busy)
+                Button("Close") { dismiss() }.accessibilityLabel("Close").keyboardShortcut(.cancelAction).disabled(busy)
                 Spacer()
                 if plan != nil {
-                    Button("back to editing") { plan = nil }.accessibilityLabel("Back to editing").disabled(busy)
+                    Button("Back to editing") { plan = nil }.accessibilityLabel("Back to editing").disabled(busy)
                     Button(plan?.archive == true ? "Apply archive" : "Apply edit") { Task { busy = true; defer { busy = false }; do { _ = try await ContextUpdateActivity.perform { try await manager.apply(plan!.id) }; changed(); dismiss() } catch { failure = error.localizedDescription; plan = nil } } }.disabled(busy)
                 } else {
-                    Button("preview archive") { Task { do { plan = try await manager.prepareArchive(entry: entry); failure = nil } catch { failure = error.localizedDescription } } }.accessibilityLabel("Preview archive").disabled(!loaded || !entry.editable || truncated || text != original)
-                    Button("preview changes") { Task { do { plan = try await manager.prepare(entry: entry, text: text); failure = nil } catch { failure = error.localizedDescription } } }.accessibilityLabel("Preview changes").disabled(!loaded || !entry.editable || truncated || text == original)
+                    Button("Preview archive") { Task { do { plan = try await manager.prepareArchive(entry: entry); failure = nil } catch { failure = error.localizedDescription } } }.accessibilityLabel("Preview archive").disabled(!loaded || !entry.editable || truncated || text != original)
+                    Button("Preview changes") { Task { do { plan = try await manager.prepare(entry: entry, text: text); failure = nil } catch { failure = error.localizedDescription } } }.accessibilityLabel("Preview changes").disabled(!loaded || !entry.editable || truncated || text == original)
                 }
             }
-        }.padding(24).frame(width: 680, height: 640)
+        }.padding(28).frame(width: 680, height: 640)
+        .contextTheme(DaddyTheme.palette)
+        .buttonStyle(SMMacButtonStyle())
         .task {
             do { let document = try await Task.detached { try MemoryInventory.read(entry) }.value; text = document.text; original = text; truncated = document.truncated; loaded = true }
             catch { failure = error.localizedDescription }
@@ -293,7 +389,7 @@ private struct MemoryHistorySheet: View {
     @State private var restoring: UUID?
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Memory edit history").font(.title2.bold())
+            Text("Memory edit history").font(DaddyTheme.heading(24))
             Text("Restore only succeeds while the saved result is unchanged. Newer work is preserved.").foregroundStyle(DaddyTheme.muted)
             if let failure { Text(failure).foregroundStyle(DaddyTheme.amber) }
             ScrollView {
@@ -302,19 +398,21 @@ private struct MemoryHistorySheet: View {
                     ForEach(receipts) { receipt in
                         Text(receipt.path).font(.caption.monospaced()).textSelection(.enabled)
                         Text("\(receipt.date.formatted()) · \(receipt.restored ? "Restored" : receipt.completed ? (receipt.archived == true ? "Archived" : "Applied") : "Interrupted · inspect recovery")").font(.caption)
-                        if !receipt.restored { Button("restore previous document") { restoring = receipt.id }.accessibilityLabel("Restore previous document").disabled(restoring != nil) }
+                        if !receipt.restored { Button("Restore previous document") { restoring = receipt.id }.accessibilityLabel("Restore previous document").disabled(restoring != nil) }
                         Divider()
                     }
                 }.frame(maxWidth: .infinity, alignment: .leading)
             }
-            Button("done") { dismiss() }.accessibilityLabel("Done").keyboardShortcut(.cancelAction)
-        }.padding(24).frame(width: 620, height: 520)
+            Button("Done") { dismiss() }.accessibilityLabel("Done").keyboardShortcut(.cancelAction)
+        }.padding(28).frame(width: 620, height: 520)
+        .contextTheme(DaddyTheme.palette)
+        .buttonStyle(SMMacButtonStyle())
         .task { await reload() }
         .confirmationDialog("Restore the previous document?", isPresented: Binding(get: { restoring != nil }, set: { if !$0 { restoring = nil } })) {
             if let id = restoring {
-                Button("restore") { restoring = nil; Task { do { try await ContextUpdateActivity.perform { try await manager.restore(id) }; changed(); await reload() } catch { failure = error.localizedDescription } } }.accessibilityLabel("Restore")
+                Button("Restore") { restoring = nil; Task { do { try await ContextUpdateActivity.perform { try await manager.restore(id) }; changed(); await reload() } catch { failure = error.localizedDescription } } }.accessibilityLabel("Restore")
             }
-            Button("cancel", role: .cancel) { restoring = nil }.accessibilityLabel("Cancel")
+            Button("Cancel", role: .cancel) { restoring = nil }.accessibilityLabel("Cancel")
         }
     }
     private func reload() async { do { receipts = try await manager.history() } catch { failure = error.localizedDescription } }

@@ -20,8 +20,8 @@ struct ContextModeToggle<Value: Hashable>: View {
             ForEach(choices.indices, id: \.self) { index in
                 let choice = choices[index]
                 Button { selection = choice.value } label: {
-                    Text(choice.title.lowercased())
-                        .font(.caption.weight(.semibold))
+                    Text(choice.title)
+                        .font(DaddyTheme.type(12, .medium))
                         .lineLimit(1)
                         .frame(maxWidth: .infinity)
                         .padding(.horizontal, 12)
@@ -65,12 +65,12 @@ struct ContextChoiceMenu<Value: Hashable>: View {
             }
         } label: {
             HStack(spacing: 7) {
-                Text(title.lowercased())
-                    .font(.system(size: 9, weight: .bold, design: .rounded))
+                Text(title.uppercased())
+                    .font(DaddyTheme.type(9, .medium))
                     .tracking(0.5)
                     .foregroundStyle(DaddyTheme.muted)
                 Text(selectedTitle)
-                    .font(.caption.weight(.semibold))
+                    .font(DaddyTheme.type(12, .medium))
                     .foregroundStyle(DaddyTheme.mint)
                     .lineLimit(1)
                 Spacer(minLength: 2)

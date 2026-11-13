@@ -43,8 +43,8 @@ struct FocusDeskView: View {
             VStack(alignment: .leading, spacing: compact ? 22 : 30) {
                 ScreenHeader(
                     eyebrow: "",
-                    title: "usage",
-                    subtitle: "What's left on your Codex, Claude and Grok accounts, and what your agents used locally. Recorded runs are in Run telemetry.",
+                    title: "Usage",
+                    subtitle: "Know what’s left. See what your agents used locally, with each source kept distinct.",
                     art: .telemetry,
                     hero: !compact,
                     compact: compact
@@ -178,7 +178,7 @@ struct FocusDeskView: View {
                 }
                 }
             }
-            .padding(compact ? 18 : 28)
+            .padding(compact ? 24 : 32)
             .frame(maxWidth: 1220, alignment: .topLeading)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }

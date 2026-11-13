@@ -1,5 +1,5 @@
 import AppKit
-import ContextCore
+@testable import ContextCore
 import SwiftUI
 import Testing
 import SaaSMakerUI
@@ -16,7 +16,9 @@ func sharedMacMemoryWindowEvidence() async throws {
     let project = home.appendingPathComponent("workspace")
     let suite = "ContextDaddy.NativeUIFixture.\(UUID().uuidString)"
     let defaults = try #require(UserDefaults(suiteName: suite))
-    defaults.set(project.path, forKey: "skillWorkingFolder")
+    // Empty Skills scope is essential: its production loader returns immediately.
+    // Memory still receives only the supplied temporary inventory.
+    defaults.set("", forKey: "skillWorkingFolder")
     defer {
         defaults.removePersistentDomain(forName: suite)
         try? FileManager.default.removeItem(at: temporary)
@@ -59,26 +61,48 @@ func sharedMacMemoryWindowEvidence() async throws {
     let manager = MemoryDocumentManager(storage: temporary.appendingPathComponent("recovery"), home: home)
     let model = ContextDaddyModel(discover: { _ in throw CancellationError() },
                                   loadQuota: { _ in throw CancellationError() })
+    let coverage = AIContextCoverage(roots: [home.path], visitedEntries: files.count,
+        itemLimitReached: false, entryLimitReached: false, unreadableCount: 0, skippedLinks: 0,
+        notes: ["Temporary fixture sources only."])
+    let skillNames = ["native-components", "design-review", "focused-tests", "context-hygiene", "release-checks"]
+    let records = try skillNames.enumerated().map { index, name in
+        let file = try document("workspace/skills/\(name)/SKILL.md", "---\nname: \(name)\ndescription: Temporary native UI review fixture.\n---\nUse this temporary fixture for \(name).\n")
+        return SkillRecord(id: file.path, name: name, description: "Temporary fixture · \(name.replacingOccurrences(of: "-", with: " "))",
+            logicalBytes: Int64(files[file]?.count ?? 0), modified: Date(),
+            exposures: [SkillExposure(logicalPath: file.path, resolvedPath: file.path, source: "Temporary workspace", scope: .project, provider: .codex, applicability: .conditional)],
+            policies: [SkillRuntimePolicy(runtime: .codex, mode: .automatic, explicit: false, reason: "Temporary fixture route.", invocation: "$" + name, isExposed: true)],
+            contentFingerprint: "temporary-fixture-\(index)")
+    }
+    model.catalog = SkillCatalogSnapshot(records: records, coverage: coverage, generatedAt: Date())
+    let usageFixture = UsageLayoutTests.fixtureModel()
+    model.usageReport = usageFixture.usageReport
+    model.quotaReceipts = usageFixture.quotaReceipts
+    model.projects = [AIContextProject(id: project.path, path: project.path, name: "Temporary workspace",
+        locations: [AIContextProjectLocation(id: project.path, path: project.path, name: "Project instructions", scope: .project,
+            items: items, providers: [.codex, .claude, .cursor], logicalBytes: items.reduce(0) { $0 + $1.logicalBytes })],
+        projectItemCount: items.count, projectLogicalBytes: items.reduce(0) { $0 + $1.logicalBytes }, providers: [.codex, .claude, .cursor])]
+    model.show(.memory)
+    let initialSelection = ProcessInfo.processInfo.environment["CONTEXTDADDY_MAC_UI_SELECTED"] == "1" ? snapshot.entries.first : nil
     let view = VStack(spacing: 0) {
         HStack {
             Label("Temporary fixture documents", systemImage: "doc.text")
             Spacer()
-            Text("Production Memory view · no live discovery")
+            Text("Production workspace · no live discovery")
         }
         .font(.caption).foregroundStyle(DaddyTheme.muted).padding(.horizontal, 24).frame(height: 36)
         Divider()
-        MemoryLibraryView(snapshot: snapshot, manager: manager)
+        RootView(refreshOnAppear: false, memorySnapshot: snapshot, memoryManager: manager, memorySelection: initialSelection)
     }
     .environment(model)
     .defaultAppStorage(defaults)
     .contextTheme(DaddyTheme.palette)
     .buttonStyle(SMMacButtonStyle())
     let host = NSHostingView(rootView: view)
-    let window = NSWindow(contentRect: NSRect(x: 120, y: 100, width: 1180, height: 800),
+    let window = NSWindow(contentRect: NSRect(x: 120, y: 100, width: 1240, height: 800),
                           styleMask: [.titled, .resizable, .closable], backing: .buffered, defer: false)
-    window.title = "ContextDaddy shared UI · temporary fixtures"
+    window.title = "ContextDaddy review desk · temporary fixtures"
     window.isReleasedWhenClosed = false
-    window.contentMinSize = NSSize(width: 736, height: 500)
+    window.contentMinSize = NSSize(width: 880, height: 640)
     window.appearance = NSAppearance(named: .darkAqua)
     window.contentView = host
     NSApplication.shared.setActivationPolicy(.regular)
@@ -94,25 +118,55 @@ func sharedMacMemoryWindowEvidence() async throws {
     let receipt: [String: Any] = [
         "pid": ProcessInfo.processInfo.processIdentifier, "windowNumber": window.windowNumber,
         "fixtureRoot": temporary.path, "documents": snapshot.entries.count,
-        "view": "MemoryLibraryView", "liveDiscovery": false,
+        "view": "RootView + MemoryLibraryView", "liveDiscovery": false,
         "resizeRequest": ready + ".size", "done": ready + ".done"
     ]
     try JSONSerialization.data(withJSONObject: receipt, options: [.prettyPrinted, .sortedKeys])
         .write(to: URL(fileURLWithPath: ready), options: .atomic)
     var previousSize: Data?
-    for _ in 0..<1200 {
-        if FileManager.default.fileExists(atPath: ready + ".done") { break }
+    var previousSection: String?
+    holdNativeEventLoop {
+        if FileManager.default.fileExists(atPath: ready + ".done") { return true }
         if let request = try? Data(contentsOf: URL(fileURLWithPath: ready + ".size")), request != previousSize,
            let size = try? JSONDecoder().decode(MemoryWindowSize.self, from: request) {
-            window.setContentSize(NSSize(width: min(1800, max(736, size.width)), height: min(1200, max(500, size.height))))
+            window.setContentSize(NSSize(width: min(1800, max(880, size.width)), height: min(1200, max(640, size.height))))
             host.layoutSubtreeIfNeeded(); window.displayIfNeeded()
             previousSize = request
         }
-        try await Task.sleep(for: .milliseconds(100))
+        if let section = try? String(contentsOfFile: ready + ".section", encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines),
+           section != previousSection, let destination = AppSection(rawValue: section),
+           [.overview, .skills, .memory, .projects].contains(destination) {
+            // These destinations do not start collectors. Skills' empty scope prevents live discovery.
+            defaults.set("", forKey: "skillWorkingFolder")
+            model.show(destination)
+            previousSection = section
+        }
+        return false
     }
     for (file, original) in files {
         #expect(try Data(contentsOf: file) == original, "Native UI review must leave fixture documents unchanged")
     }
+}
+
+/// Test-only AppKit event loop: AX must be able to service real native actions.
+@MainActor private func holdNativeEventLoop(poll: @escaping @MainActor () -> Bool) {
+    let deadline = Date().addingTimeInterval(120)
+    let timer = Timer.scheduledTimer(withTimeInterval: 0.1, repeats: true) { _ in
+        MainActor.assumeIsolated {
+            guard poll() || Date() >= deadline else { return }
+            NSApplication.shared.stop(nil)
+            if let event = NSEvent.otherEvent(with: .applicationDefined, location: .zero,
+                modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
+                windowNumber: 0, context: nil, subtype: 0, data1: 0, data2: 0) {
+                NSApplication.shared.postEvent(event, atStart: false)
+            }
+        }
+    }
+    if ProcessInfo.processInfo.environment["CONTEXTDADDY_MAC_UI_ACTIVATE"] == "1" {
+        NSApplication.shared.activate(ignoringOtherApps: true)
+    }
+    NSApplication.shared.run()
+    timer.invalidate()
 }
 
 private struct MemoryWindowSize: Decodable {

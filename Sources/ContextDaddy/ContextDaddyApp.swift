@@ -27,14 +27,14 @@ struct ContextDaddyApp: App {
             RootView()
                 .environment(model)
                 .preferredColorScheme(.dark)
-                .frame(minWidth: 960, minHeight: 640)
+                .frame(minWidth: 880, minHeight: 640)
                 .onAppear {
                     appDelegate.activeWork = { model.activeWorkDescription }
                     ContextStartupCheck.windowAppeared()
                 }
                 .task { if !ContextStartupCheck.enabled { updates.start(model: model) } }
         }
-        .defaultSize(width: 1180, height: 740)
+        .defaultSize(width: 1240, height: 800)
         // Keep the window at least as wide as RootView's minimum; a narrower
         // window would center the overflowing content and cut off its left edge.
         .windowResizability(.contentMinSize)

@@ -1,7 +1,7 @@
 # ContextDaddy design contract
 
 Platform: native-macos
-Supported minimum width: 960
+Supported minimum width: 880
 
 Issue #1 native acceptance captures the actual RootView shell with synthetic
 policy and redundancy records at 960×640, 1180×740 and 1440×900 logical points
@@ -27,6 +27,18 @@ and a link to Claude Usage when the CLI supplies no count. Native full-window
 evidence covers 960, 1180 and 1440 points, including missing and stale readings.
 
 ## Selected direction
+
+The owner selected A — Review desk for the November 13 family redesign: a
+198-point left sidebar, original Daddy artwork, pure black/mint palette and
+Figtree typography. The native title bar remains; a quiet scope bar and local
+status line frame the workspace. Pages use 24–32-point outer gutters, 24-point
+section rhythm, and restrained hairlines. Memory leads with folder scope,
+search and flat document rows; comparison and coverage are secondary details.
+Selected documents use an adjacent inspector when space permits and stack in
+the same scroll surface at narrow widths. Native review widths are 880, 1240
+and 1440 logical points. Earlier design notes below retain product constraints
+and historical decisions; the Review desk composition supersedes their shell
+and type sizing.
 
 Owner-directed StorageDaddy family fork: keep the A+C information architecture (live operations plus a policy ledger), but express it through StorageDaddy's warm black-and-mint visual language, rounded typography, fine outlines, and editorial Daddy doodles.
 

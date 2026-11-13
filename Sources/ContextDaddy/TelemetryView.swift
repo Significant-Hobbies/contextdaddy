@@ -14,11 +14,9 @@ struct TelemetryView: View {
             let compact = proxy.size.width < 850 || proxy.size.height < 700
             ScrollView {
                 VStack(alignment: .leading, spacing: compact ? 13 : 19) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        SMSectionHeader("run telemetry", size: 27).accessibilityLabel("Run telemetry")
-                        Text("See what ran, where tokens went, and what to review next.")
-                            .foregroundStyle(DaddyTheme.muted)
-                    }
+                    ScreenHeader(eyebrow: "Recorded evidence", title: "Run telemetry",
+                        subtitle: "See what ran, where tokens went, and what to review next.", art: .telemetry,
+                        compact: compact)
 
                     ViewThatFits(in: .horizontal) {
                         HStack(spacing: 12) {
@@ -75,7 +73,7 @@ struct TelemetryView: View {
                         .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
-                .padding(compact ? 18 : 28)
+                .padding(compact ? 24 : 32)
                 .frame(maxWidth: 1220, alignment: .topLeading)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }

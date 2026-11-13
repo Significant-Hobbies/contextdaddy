@@ -108,7 +108,7 @@ struct SourceInventoryView: View {
                 }
                 ContextPagination(page: $page, total: groups.count, pageSize: 8, noun: "sources")
             }
-            .padding(28)
+            .padding(32)
             .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .onChange(of: search) { _, _ in resetPage() }
