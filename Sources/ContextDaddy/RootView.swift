@@ -34,6 +34,8 @@ struct RootView: View {
                             isSelected: model.section == .projects && !model.evidenceOpen) { model.show(.projects) }
                         SMWorkspaceNavigationItem("Diagnostics", systemImage: "checkmark.shield",
                             isSelected: model.evidenceOpen) { model.showEvidence(.diagnostics) }
+                            .accessibilityLabel(model.configurationHealth.issues.isEmpty ? "Diagnostics"
+                                : "Diagnostics, \(model.configurationHealth.issues.count) configuration \(model.configurationHealth.issues.count == 1 ? "issue" : "issues")")
                         if !model.configurationHealth.issues.isEmpty {
                             Text("\(model.configurationHealth.issues.count.formatted()) configuration \(model.configurationHealth.issues.count == 1 ? "issue" : "issues")")
                                 .font(DaddyTheme.type(11)).foregroundStyle(model.configurationHealth.errorCount > 0 ? DaddyTheme.coral : DaddyTheme.amber)

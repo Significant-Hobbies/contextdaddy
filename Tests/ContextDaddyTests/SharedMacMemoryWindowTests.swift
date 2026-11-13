@@ -111,7 +111,11 @@ func sharedMacMemoryWindowEvidence() async throws {
         window.setFrameTopLeftPoint(NSPoint(x: screen.visibleFrame.minX + 24, y: screen.visibleFrame.maxY - 24))
     }
     // Surface this test window without activating the app or taking keyboard focus.
-    window.orderFront(nil)
+    if ProcessInfo.processInfo.environment["CONTEXTDADDY_MAC_UI_ACTIVATE"] == "1" {
+        window.makeKeyAndOrderFront(nil)
+    } else {
+        window.orderFront(nil)
+    }
     defer { window.orderOut(nil); window.contentView = nil }
     try await Task.sleep(for: .milliseconds(300))
     host.layoutSubtreeIfNeeded()
@@ -120,7 +124,10 @@ func sharedMacMemoryWindowEvidence() async throws {
         "pid": ProcessInfo.processInfo.processIdentifier, "windowNumber": window.windowNumber,
         "fixtureRoot": temporary.path, "documents": snapshot.entries.count,
         "view": "RootView + MemoryLibraryView", "liveDiscovery": false,
-        "resizeRequest": ready + ".size", "done": ready + ".done"
+        "resizeRequest": ready + ".size", "done": ready + ".done",
+        "windowFrame": ["x": Double(window.frame.minX), "y": Double(window.frame.minY), "width": Double(window.frame.width), "height": Double(window.frame.height)],
+        "contentBounds": ["width": Double(host.bounds.width), "height": Double(host.bounds.height)],
+        "backingScaleFactor": Double(window.backingScaleFactor)
     ]
     try JSONSerialization.data(withJSONObject: receipt, options: [.prettyPrinted, .sortedKeys])
         .write(to: URL(fileURLWithPath: ready), options: .atomic)

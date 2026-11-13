@@ -4,8 +4,9 @@ Platform: native-macos
 Supported minimum width: 880
 
 Issue #1 native acceptance captures the actual RootView shell with synthetic
-policy and redundancy records at 960×640, 1180×740 and 1440×900 logical points
-using AppKit-hosted SwiftUI at 2x backing scale. The fixture disables automatic
+policy and redundancy records at 880×640, 1240×800 and 1440×900 logical points
+using AppKit-hosted SwiftUI at 2x backing scale. Managed-cache, handoff and empty
+states also render at 880×640. The fixture disables automatic
 refresh so it does not inspect private agent configuration or call providers.
 The policy/redundancy mode control uses the existing labelled choice menu when
 the five segmented labels cannot fit. Summary explanations wrap instead of
