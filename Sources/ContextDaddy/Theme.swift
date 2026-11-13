@@ -7,8 +7,9 @@ enum DaddyTheme {
     static let canvas = DaddyPalette.canvas
     static let panel = DaddyPalette.canvas
     static let raised = Color(red: 0.055, green: 0.075, blue: 0.066)
-    static let line = muted.opacity(0.18)
-    static let muted = DaddyPalette.secondaryInk
+    static let ink = Color(red: 0.94, green: 0.96, blue: 0.95)
+    static let line = Color.white.opacity(0.12)
+    static let muted = Color(red: 0.59, green: 0.64, blue: 0.61)
     static let mint = DaddyPalette.mint
     static let blue = DaddyPalette.blue
     static let amber = DaddyPalette.amber
@@ -20,7 +21,7 @@ enum DaddyTheme {
         palette.background = canvas
         palette.surface = panel
         palette.card = panel
-        palette.foreground = .white
+        palette.foreground = ink
         palette.mutedForeground = muted
         palette.border = line
         palette.hairline = line
@@ -28,7 +29,8 @@ enum DaddyTheme {
         palette.warning = amber
         palette.destructive = coral
         palette.radius = 10
-        palette.displayFont = palette.sansFont
+        palette.sansFont = "Figtree"
+        palette.displayFont = "Figtree"
         palette.accent = mint.opacity(0.11)
         palette.input = line
         palette.displayWeight = 600
@@ -36,6 +38,12 @@ enum DaddyTheme {
         palette.textFont = palette.sansFont
         return palette
     }()
+
+    static func type(_ size: CGFloat, _ weight: Font.Weight = .regular) -> Font {
+        .custom("Figtree", size: size).weight(weight)
+    }
+
+    static func heading(_ size: CGFloat) -> Font { type(size, .semibold) }
 
     static func color(for quality: EvidenceQuality) -> Color {
         switch quality {

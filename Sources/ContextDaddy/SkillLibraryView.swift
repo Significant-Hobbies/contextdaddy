@@ -113,11 +113,32 @@ struct SkillLibraryView: View {
                     header
                     folderControl
                     if folderLoading { ProgressView("Reading this folder…") }
-                    else {
-                        inventoryAnswers
-                        sourceAuditSummary
-                        activitySummary
-                        DisclosureGroup("Where these skills come from", isExpanded: $locationsExpanded) {
+                    else if model.catalog != nil || model.skillFolderContext != nil {
+                        let answers = SkillInventoryAnswers(records: records)
+                        HStack(spacing: 8) {
+                            Text("\(answers.local.count.formatted()) local definitions").foregroundStyle(DaddyTheme.ink)
+                            Text("· \(answers.uniqueNames.formatted()) unique names").foregroundStyle(DaddyTheme.muted)
+                        }.font(DaddyTheme.type(12))
+                        if (model.skillFolderContext?.coverage ?? model.catalog?.coverage)?.isPartial == true {
+                            Text("Partial scan · discovered counts, not a complete inventory.")
+                                .font(DaddyTheme.type(11)).foregroundStyle(DaddyTheme.amber)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
+                    if showsGuide && contentWidth >= 1180 {
+                        HStack(alignment: .top, spacing: 20) {
+                            workspace(width: contentWidth - 364, scroll: scroll)
+                            guide(scroll: scroll).frame(width: 280)
+                        }
+                    } else {
+                        if showsGuide { guide(scroll: scroll) }
+                        workspace(width: contentWidth - 64, scroll: scroll)
+                    }
+                    if !folderLoading {
+                    DisclosureGroup("Library coverage & counts") { inventoryAnswers.padding(.top, 12) }
+                    DisclosureGroup("Source audit") { sourceAuditSummary.padding(.top, 12) }
+                    DisclosureGroup("Recorded skill activity") { activitySummary.padding(.top, 12) }
+                    DisclosureGroup("Where these skills come from", isExpanded: $locationsExpanded) {
                         SkillLocationMapView(records: ownedRecords) { path, ids in
                             query = ""; agent = nil; location = nil
                             scopeFilter = nil; invocationFilter = nil; favoriteOnly = false
@@ -128,19 +149,10 @@ struct SkillLibraryView: View {
                             checked = ids
                             openOrganization(.cleanup)
                         }
-                        }.font(.callout)
-                    }
-                    if showsGuide && contentWidth >= 1180 {
-                        HStack(alignment: .top, spacing: 20) {
-                            workspace(width: contentWidth - 344, scroll: scroll)
-                            guide(scroll: scroll).frame(width: 280)
-                        }
-                    } else {
-                        if showsGuide { guide(scroll: scroll) }
-                        workspace(width: contentWidth - 44, scroll: scroll)
+                    }.font(DaddyTheme.type(12))
                     }
                 }
-                .padding(22)
+                .padding(32)
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
@@ -338,16 +350,10 @@ struct SkillLibraryView: View {
     }
 
     private var header: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack {
-                SMDisplay("skills", size: 22).accessibilityLabel("Skills")
-                Spacer()
-                simpleActions
-            }
-            VStack(alignment: .leading, spacing: 10) {
-                SMDisplay("skills", size: 22).accessibilityLabel("Skills")
-                simpleActions
-            }
+        VStack(alignment: .leading, spacing: 18) {
+            ScreenHeader(eyebrow: "Your working library", title: "Skills",
+                subtitle: "Find the right skill. Understand who can use it, then make changes with a preview.", art: .skills)
+            simpleActions
         }
     }
 
@@ -621,12 +627,36 @@ struct SkillLibraryView: View {
             SMSearchField("Search skills", text: $query, focus: $searchFocused,
                           accessibilityLabel: "Search skill library")
                 .id("skill-search")
+            if activityFilter != .all {
+                HStack(spacing: 12) {
+                    Label("Activity: \(activityFilter.rawValue)", systemImage: "line.3.horizontal.decrease.circle")
+                        .font(DaddyTheme.type(12)).foregroundStyle(DaddyTheme.mint)
+                    Spacer(minLength: 8)
+                    Button("Clear activity filter") { activityFilter = .all }
+                }
+                if activityFilter == .noEvidence {
+                    Text("No recorded event does not mean unused. Agent logs differ, and this filter excludes folders without project attribution.")
+                        .font(DaddyTheme.type(11)).foregroundStyle(DaddyTheme.amber)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            if unresolvedSourcesOnly {
+                HStack(spacing: 12) {
+                    Label("Unresolved sources", systemImage: "line.3.horizontal.decrease.circle")
+                        .font(DaddyTheme.type(12)).foregroundStyle(DaddyTheme.mint)
+                    Spacer(minLength: 8)
+                    Button("Show all sources") { unresolvedSourcesOnly = false }
+                }
+                Text("Includes locally authored skills; this is a review filter, not a removal recommendation.")
+                    .font(DaddyTheme.type(11)).foregroundStyle(DaddyTheme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
             DisclosureGroup("Filters", isExpanded: $filtersOpen) {
                 VStack(alignment: .leading, spacing: 8) {
                     filterMenus
                     organizationFilters
                     favoritesButton
-                    Button("reset filters") { mapSkillIDs = nil; mapLocation = nil; ownership = nil; agent = nil; location = nil; scopeFilter = nil; invocationFilter = nil; favoriteOnly = false; unresolvedSourcesOnly = false }.accessibilityLabel("Reset filters")
+                    Button("reset filters") { mapSkillIDs = nil; mapLocation = nil; ownership = nil; agent = nil; location = nil; scopeFilter = nil; invocationFilter = nil; favoriteOnly = false; unresolvedSourcesOnly = false; activityFilter = .all }.accessibilityLabel("Reset filters")
                 }.font(.caption)
             }
         }

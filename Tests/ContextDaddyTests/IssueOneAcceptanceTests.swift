@@ -33,7 +33,7 @@ struct IssueOneAcceptanceTests {
             .deletingLastPathComponent().deletingLastPathComponent()
         let directory = root.appendingPathComponent("artifacts/design/issue-1")
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-        for (width, height) in [(960, 640), (1180, 740), (1440, 900)] {
+        for (width, height) in [(880, 640), (1240, 800), (1440, 900)] {
             for mode in [SkillsMode.ledger, .redundancy] {
                 model.skillsMode = mode
                 try render(model, width: width, height: height,
@@ -43,7 +43,7 @@ struct IssueOneAcceptanceTests {
         model.redundancyKindFilter = .managed
         #expect(model.visibleRedundancyFindings.count == 1)
         #expect(model.visibleRedundancyFindings.allSatisfy { $0.isManagedCacheOnly })
-        try render(model, width: 960, height: 640, to: directory.appendingPathComponent("managed-960.png"))
+        try render(model, width: 880, height: 640, to: directory.appendingPathComponent("managed-880.png"))
         model.redundancyKindFilter = .review
         model.captureSkillIssues()
         let baseline = try #require(model.skillIssueBaseline)
@@ -52,11 +52,11 @@ struct IssueOneAcceptanceTests {
             scannedRecordIDs: Set(records.map(\.id)))
         #expect(model.skillIssueVerification?.stillDetected.count == 2)
         #expect(model.skillIssueVerification?.cleared.isEmpty == true)
-        try render(model, width: 960, height: 640, to: directory.appendingPathComponent("handoff-960.png"))
+        try render(model, width: 880, height: 640, to: directory.appendingPathComponent("handoff-880.png"))
         model.skillIssueBaseline = nil
         model.search = "no matching fixture"
         #expect(model.visibleRedundancyFindings.isEmpty)
-        try render(model, width: 960, height: 640, to: directory.appendingPathComponent("empty-960.png"))
+        try render(model, width: 880, height: 640, to: directory.appendingPathComponent("empty-880.png"))
     }
 
     private func record(_ name: String, path: String, fingerprint: String,
@@ -87,8 +87,14 @@ struct IssueOneAcceptanceTests {
         RunLoop.current.run(until: Date().addingTimeInterval(0.2))
         hosting.layoutSubtreeIfNeeded()
         window.displayIfNeeded()
-        let scroll = try #require(scrollViews(hosting).first)
-        #expect(scrollViews(hosting).count == 1)
+        // The sidebar has its own bounded navigation scroll area. The page
+        // still owns exactly one vertical scroll surface, including all states.
+        let allScrolls = scrollViews(hosting)
+        let pageScrolls = allScrolls.filter { $0.convert($0.bounds, to: hosting).minX >= 197 }
+        let sidebarScrolls = allScrolls.filter { $0.convert($0.bounds, to: hosting).maxX <= 199 }
+        #expect(pageScrolls.count == 1)
+        #expect(sidebarScrolls.count == 1)
+        let scroll = try #require(pageScrolls.first)
         let document = try #require(scroll.documentView)
         // Legacy scrollers reserve part of the scroll view's frame. SwiftUI's
         // document can include that trailing inset without clipping its content.

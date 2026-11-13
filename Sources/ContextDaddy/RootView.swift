@@ -8,146 +8,109 @@ struct RootView: View {
     /// Disable automatic refresh for a supplied, already-loaded preview model.
     var refreshOnAppear = true
 
+    /// Supplied only by the isolated native review host.
+    var memorySnapshot: MemoryInventory?
+    var memoryManager = MemoryDocumentManager()
+    var memorySelection: MemoryEntry?
+
     var body: some View {
-        @Bindable var model = model
         GeometryReader { viewport in
-        HStack(spacing: 0) {
-            VStack(alignment: .leading, spacing: 0) {
-                BrandMark()
-                    .padding(.horizontal, 18)
-                    .padding(.top, 18)
-                    .padding(.bottom, 14)
-                VStack(spacing: 5) {
-                    ForEach(AppSection.allCases.filter { $0 != .projects }) { section in
-                        Button {
-                            model.show(section)
-                        } label: {
-                            HStack(spacing: 10) {
-                                Image(systemName: section.icon).frame(width: 18)
-                                Text(section.label.lowercased()).accessibilityLabel(section.label)
-                                Spacer()
-                            }
-                            .font(.system(size: 13, weight: model.section == section && !model.evidenceOpen ? .semibold : .regular))
-                            .foregroundStyle(model.section == section && !model.evidenceOpen ? DaddyTheme.mint : DaddyTheme.muted)
-                            .padding(.horizontal, 11)
-                            .frame(height: 36)
-                            .background(model.section == section && !model.evidenceOpen ? DaddyTheme.mint.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: 8))
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityAddTraits(model.section == section && !model.evidenceOpen ? .isSelected : [])
-                    }
-                }
-                .padding(.horizontal, 10)
-                Rectangle()
-                    .fill(DaddyTheme.line)
-                    .frame(height: 1)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
-                Button {
-                    model.showEvidence(.diagnostics)
-                } label: {
-                    HStack(spacing: 10) {
-                        Image(systemName: "tray.full").frame(width: 18)
-                        VStack(alignment: .leading, spacing: 3) {
-                            Text("diagnostics")
-                                .lineLimit(1)
-                                .minimumScaleFactor(0.9)
-                            if !model.configurationHealth.issues.isEmpty {
-                                Text("\(model.configurationHealth.issues.count.formatted()) configuration \(model.configurationHealth.issues.count == 1 ? "issue" : "issues")")
-                                    .font(.caption2.weight(.semibold)).monospacedDigit()
-                                    .foregroundStyle(model.configurationHealth.errorCount > 0 ? DaddyTheme.coral : DaddyTheme.amber)
-                            }
-                        }
-                        Spacer(minLength: 0)
-                    }
-                    .font(.system(size: 12, weight: model.evidenceOpen ? .semibold : .regular))
-                    .foregroundStyle(model.evidenceOpen ? DaddyTheme.mint : DaddyTheme.muted)
-                    .padding(.horizontal, 11)
-                    .frame(minHeight: model.configurationHealth.issues.isEmpty ? 38 : 52)
-                    .background(model.evidenceOpen ? DaddyTheme.mint.opacity(0.1) : .clear, in: RoundedRectangle(cornerRadius: 8))
-                    .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .accessibilityAddTraits(model.evidenceOpen ? .isSelected : [])
-                .accessibilityLabel(model.configurationHealth.issues.isEmpty
-                    ? "diagnostics"
-                    : "diagnostics, \(model.configurationHealth.issues.count) configuration \(model.configurationHealth.issues.count == 1 ? "issue" : "issues")")
-                .help("Discovered files and read-only configuration diagnostics")
-                .padding(.horizontal, 10)
-                Button("project files & instructions") { model.show(.projects) }
-                    .font(.caption).buttonStyle(.plain).foregroundStyle(DaddyTheme.muted)
-                    .padding(.horizontal, 20).padding(.top, 12)
-                Spacer(minLength: 8)
-                PrivacyFooter()
-                    .padding(16)
-            }
-            .safeAreaPadding(.top, 18)
-            .frame(maxHeight: .infinity, alignment: .top)
-            .background(DaddyTheme.canvas)
-            .frame(width: 224)
-            Rectangle().fill(DaddyTheme.line).frame(width: 1)
             VStack(spacing: 0) {
-                Group {
-                    if model.evidenceOpen {
-                        SourcesHubView()
-                    } else {
-                        switch model.section ?? .overview {
-                        case .overview: LiveRunsView()
-                        case .skills: SkillsLedgerView()
-                        case .memory: MemoryLibraryView()
-                        case .projects: ProjectsContextView()
-                        case .telemetry: TelemetryView()
+                HStack(spacing: 0) {
+                    SMWorkspaceSidebar(width: 198) {
+                        BrandMark()
+                    } navigation: {
+                        ForEach(AppSection.allCases.filter { $0 != .projects }) { section in
+                            SMWorkspaceNavigationItem(section.label.capitalized, systemImage: section.icon,
+                                isSelected: model.section == section && !model.evidenceOpen) {
+                                model.show(section)
+                            }
                         }
+                        Rectangle().fill(DaddyTheme.line).frame(height: 1).padding(.vertical, 16)
+                        Text("WORKSPACE")
+                            .font(DaddyTheme.type(10, .medium)).tracking(1.3)
+                            .foregroundStyle(DaddyTheme.muted).padding(.horizontal, 11).padding(.bottom, 6)
+                        SMWorkspaceNavigationItem("Project files", systemImage: "folder",
+                            isSelected: model.section == .projects && !model.evidenceOpen) { model.show(.projects) }
+                        SMWorkspaceNavigationItem("Diagnostics", systemImage: "checkmark.shield",
+                            isSelected: model.evidenceOpen) { model.showEvidence(.diagnostics) }
+                            .accessibilityLabel(model.configurationHealth.issues.isEmpty ? "Diagnostics"
+                                : "Diagnostics, \(model.configurationHealth.issues.count) configuration \(model.configurationHealth.issues.count == 1 ? "issue" : "issues")")
+                        if !model.configurationHealth.issues.isEmpty {
+                            Text("\(model.configurationHealth.issues.count.formatted()) configuration \(model.configurationHealth.issues.count == 1 ? "issue" : "issues")")
+                                .font(DaddyTheme.type(11)).foregroundStyle(model.configurationHealth.errorCount > 0 ? DaddyTheme.coral : DaddyTheme.amber)
+                                .padding(.leading, 40).padding(.top, 2)
+                                .accessibilityHidden(true)
+                        }
+                    } footer: {
+                        PrivacyFooter()
                     }
+                    VStack(spacing: 0) {
+                        SMWorkspaceScopeBar(pageTitle, systemImage: pageIcon,
+                            detail: "Local to this Mac") { EmptyView() }
+                        Group {
+                            if model.evidenceOpen {
+                                SourcesHubView()
+                            } else {
+                                switch model.section ?? .overview {
+                                case .overview: LiveRunsView()
+                                case .skills: SkillsLedgerView()
+                                case .memory: MemoryLibraryView(snapshot: memorySnapshot, manager: memoryManager, initialSelection: memorySelection)
+                                case .projects: ProjectsContextView()
+                                case .telemetry: TelemetryView()
+                                }
+                            }
+                        }
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                HStack(spacing: 8) {
+                    Image(systemName: "lock.shield").foregroundStyle(DaddyTheme.mint)
+                    Text("Private by design. Changes stay in your control.")
+                    Spacer(minLength: 12)
+                    if model.isLoading { ProgressView().controlSize(.mini) }
+                    Text(model.contextMenuStatus).lineLimit(1)
+                }
+                .font(DaddyTheme.type(10)).foregroundStyle(DaddyTheme.muted)
+                .padding(.horizontal, 24).frame(height: 30)
+                .overlay(alignment: .top) { Rectangle().fill(DaddyTheme.line).frame(height: 1) }
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-            .background(DaddyTheme.canvas)
-        }
-        .frame(width: viewport.size.width, height: viewport.size.height)
+            .frame(width: viewport.size.width, height: viewport.size.height)
         }
         .task { if refreshOnAppear && !ContextStartupCheck.enabled { await model.refresh() } }
+        .background(SMWorkspaceWindowChrome())
         .contextTheme(DaddyTheme.palette)
-        .font(.custom(DaddyTheme.palette.sansFont, size: 14))
+        .font(DaddyTheme.type(14))
         .buttonStyle(SMMacButtonStyle())
         .toolbar(.hidden, for: .windowToolbar)
     }
+
+    private var pageTitle: String { model.evidenceOpen ? "Files & diagnostics" : (model.section ?? .overview).label.capitalized }
+    private var pageIcon: String { model.evidenceOpen ? "checkmark.shield" : (model.section ?? .overview).icon }
 }
 
 private struct BrandMark: View {
     var body: some View {
-        HStack(spacing: 8) {
-            ContextDoodleArt(topic: .skills)
-                .frame(width: 32, height: 32)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("contextdaddy")
-                    .font(.custom(DaddyTheme.palette.sansFont, size: 16).weight(.semibold))
-                    .tracking(-0.3)
-                    .foregroundStyle(Color.white)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .layoutPriority(2)
-                Text("agent context, explained")
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(DaddyTheme.muted)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.75)
-            }
+        HStack(spacing: 9) {
+            ContextDoodleArt(topic: .skills).frame(width: 32, height: 36)
+            Text("contextdaddy")
+                .font(DaddyTheme.type(16, .semibold)).tracking(-0.5)
+                .foregroundStyle(DaddyTheme.ink).fixedSize()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityLabel("ContextDaddy")
     }
 }
 
 private struct PrivacyFooter: View {
     var body: some View {
-        VStack(alignment: .leading, spacing: 7) {
+        VStack(alignment: .leading, spacing: 8) {
             Label("Local & redacted", systemImage: "lock.shield")
-                .font(.caption.weight(.semibold)).foregroundStyle(DaddyTheme.mint)
-            Text("Local discovery. Document reads and changes are explicit. No prompt collection.")
-                .font(.caption2).foregroundStyle(DaddyTheme.muted).fixedSize(horizontal: false, vertical: true)
+                .font(DaddyTheme.type(11, .medium)).foregroundStyle(DaddyTheme.mint)
+            Text("Discovery stays on this Mac. Document reads and changes are explicit.")
+                .font(DaddyTheme.type(11)).foregroundStyle(DaddyTheme.muted)
+                .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -175,33 +138,38 @@ struct ScreenHeader: View {
     }
 
     private var horizontalHeader: some View {
-        HStack(alignment: .center, spacing: 22) {
-            headerText(size: 26)
-            Spacer(minLength: 12)
+        HStack(alignment: .center, spacing: 28) {
+            headerText(size: 30)
+            Spacer(minLength: 16)
             if hero {
-                ContextHeroArt().frame(width: 200, height: 92)
+                ContextHeroArt().frame(width: 174, height: 96)
             } else {
-                ContextDoodleArt(topic: art).frame(width: 72, height: 72)
+                ContextDoodleArt(topic: art).frame(width: 88, height: 88)
             }
         }
-        .padding(.bottom, 2)
     }
 
     private var compactHeader: some View {
-        HStack(alignment: .top, spacing: 14) {
-            headerText(size: 24)
+        HStack(alignment: .top, spacing: 18) {
+            headerText(size: 28)
             Spacer(minLength: 8)
-            ContextDoodleArt(topic: art).frame(width: 46, height: 46)
+            ContextDoodleArt(topic: art).frame(width: 64, height: 64)
         }
     }
 
     private func headerText(size: CGFloat) -> some View {
-        VStack(alignment: .leading, spacing: 7) {
-            SMSectionHeader(eyebrow: eyebrow.isEmpty ? nil : eyebrow.lowercased(), title, size: size)
-                .accessibilityLabel(eyebrow.isEmpty ? title : "\(eyebrow), \(title)")
-            Text(subtitle).font(.callout).foregroundStyle(DaddyTheme.muted)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(alignment: .leading, spacing: 10) {
+            if !eyebrow.isEmpty {
+                Text(eyebrow.uppercased()).font(DaddyTheme.type(10, .medium))
+                    .tracking(1.2).foregroundStyle(DaddyTheme.mint)
+            }
+            Text(title.prefix(1).uppercased() + title.dropFirst())
+                .font(DaddyTheme.heading(size)).tracking(-0.7)
+                .foregroundStyle(DaddyTheme.ink).fixedSize(horizontal: false, vertical: true)
+            Text(subtitle).font(DaddyTheme.type(13)).foregroundStyle(DaddyTheme.muted)
+                .lineSpacing(3).fixedSize(horizontal: false, vertical: true)
         }
+        .accessibilityElement(children: .combine)
     }
 
 }
@@ -237,7 +205,7 @@ struct SourcesHubView: View {
                 }
                 .disabled(model.isLoading)
             }
-            .padding(.horizontal, 28)
+            .padding(.horizontal, 32)
             .padding(.top, 16)
             .padding(.bottom, 5)
             if model.sourcesMode == .inventory {
@@ -348,7 +316,7 @@ struct SkillsLedgerView: View {
                     RedundancyReviewView(compact: compact)
                 }
                 }
-                .padding(compact ? 18 : 28)
+                .padding(compact ? 24 : 32)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
             .frame(width: proxy.size.width, height: proxy.size.height)
@@ -565,10 +533,8 @@ struct CoverageView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 20) {
-                VStack(alignment: .leading, spacing: 6) {
-                    SMSectionHeader("diagnostics", size: 27).accessibilityLabel("Diagnostics")
-                    Text("Find broken agent setup, see its impact, and copy a fix to your agent.").foregroundStyle(DaddyTheme.muted)
-                }
+                ScreenHeader(eyebrow: "Read-only setup review", title: "Diagnostics",
+                    subtitle: "Find broken agent setup, see its impact, and copy a fix to your agent.", art: .cleanup)
                 HStack {
                     Label(model.discoveryStatus, systemImage: model.isLoading ? "arrow.triangle.2.circlepath" : model.discoveryReport == nil ? "questionmark.circle" : "checkmark.circle")
                         .font(.caption).foregroundStyle(model.isLoading ? DaddyTheme.blue : DaddyTheme.muted)
@@ -659,7 +625,7 @@ struct CoverageView: View {
                     Text("Use Recheck setup to scan supported local configuration.").font(.caption).foregroundStyle(DaddyTheme.muted)
                 }
             }
-            .padding(28)
+            .padding(32)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
     }

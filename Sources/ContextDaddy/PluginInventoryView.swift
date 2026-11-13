@@ -39,7 +39,7 @@ struct PluginInventoryView: View {
     var body: some View {
         GeometryReader { geometry in
             let bar = NSScroller.preferredScrollerStyle == .legacy ? NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy) : 0
-            let width = max(0, geometry.size.width - bar - 44)
+            let width = max(0, geometry.size.width - bar - 64)
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
@@ -71,7 +71,7 @@ struct PluginInventoryView: View {
                                 }.padding(.top, 10)
                             }
                         }
-                    }.padding(22).frame(width: width + 44, alignment: .leading)
+                    }.padding(32).frame(width: width + 64, alignment: .leading)
                 }.frame(width: geometry.size.width, height: geometry.size.height).clipped()
                     .onChange(of: selected) { _, value in if value != nil && width < 1050 { proxy.scrollTo("plugin-details", anchor: .top) } }
             }
@@ -91,10 +91,8 @@ struct PluginInventoryView: View {
         }
     }
     private var titles: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text("Plugins").font(.title2.bold())
-            Text("Understand what each plugin adds. Review what you can remove.").font(.callout).foregroundStyle(DaddyTheme.muted)
-        }
+        ScreenHeader(eyebrow: "Agent extensions", title: "Plugins",
+            subtitle: "Understand what each plugin adds. Review what you can remove.", art: .applications)
     }
     private var headerActions: some View {
         HStack {
