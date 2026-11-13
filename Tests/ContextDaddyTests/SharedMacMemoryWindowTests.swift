@@ -74,6 +74,7 @@ func sharedMacMemoryWindowEvidence() async throws {
             contentFingerprint: "temporary-fixture-\(index)")
     }
     model.catalog = SkillCatalogSnapshot(records: records, coverage: coverage, generatedAt: Date())
+    model.skillActivity = SkillActivitySnapshot(observations: [], coverage: [], scannedAt: Date())
     let usageFixture = UsageLayoutTests.fixtureModel()
     model.usageReport = usageFixture.usageReport
     model.quotaReceipts = usageFixture.quotaReceipts

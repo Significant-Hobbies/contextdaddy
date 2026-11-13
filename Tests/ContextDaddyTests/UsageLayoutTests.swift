@@ -9,7 +9,7 @@ import Testing
 /// area, and the rendered page is written as native evidence at realistic window sizes.
 @MainActor
 struct UsageLayoutTests {
-    static let sizes = [(960, 640), (1100, 800), (1440, 900)]
+    static let sizes = [(880, 640), (1240, 800), (1440, 900)]
 
     @Test func usageSectionsFitThePageWidthAndRenderEvidence() throws {
         let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
@@ -30,8 +30,8 @@ struct UsageLayoutTests {
         // A connected mouse or "Always show scroll bars" takes a scroller lane from the page.
         UserDefaults.standard.set("Always", forKey: "AppleShowScrollBars")
         defer { UserDefaults.standard.removeObject(forKey: "AppleShowScrollBars") }
-        try Self.render(model, width: 960, height: 640,
-                        to: directory.appendingPathComponent("usage-scrollbar-960x640.png"))
+        try Self.render(model, width: 880, height: 640,
+                        to: directory.appendingPathComponent("usage-scrollbar-880x640.png"))
         UserDefaults.standard.removeObject(forKey: "AppleShowScrollBars")
         model.isQuotaLoading = true
         try Self.render(model, width: 1180, height: 740,
