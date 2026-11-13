@@ -79,7 +79,7 @@ struct RootView: View {
             .frame(width: viewport.size.width, height: viewport.size.height)
         }
         .task { if refreshOnAppear && !ContextStartupCheck.enabled { await model.refresh() } }
-        .background(SMWorkspaceWindowChrome())
+        .smWorkspaceWindowChrome()
         .contextTheme(DaddyTheme.palette)
         .font(DaddyTheme.type(14))
         .buttonStyle(SMMacButtonStyle())
