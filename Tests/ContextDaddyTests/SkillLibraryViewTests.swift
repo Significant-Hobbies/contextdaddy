@@ -173,9 +173,13 @@ struct SkillLibraryViewTests {
 
     @Test func rootKeepsSkillsInsideTheActualWindow() throws {
         let model = ContextDaddyModel(discover: { _ in throw CancellationError() })
+        let suite = "ContextDaddy.RootLayoutFixture.\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
         model.show(.skills)
         for width in [960, 1180, 1440] {
-            let host = NSHostingView(rootView: RootView().environment(model))
+            let host = NSHostingView(rootView: RootView(refreshOnAppear: false)
+                .environment(model).defaultAppStorage(defaults))
             host.frame = NSRect(x: 0, y: 0, width: width, height: 640)
             let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
             window.contentView = host
