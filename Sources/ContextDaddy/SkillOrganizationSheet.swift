@@ -89,7 +89,7 @@ struct SkillOrganizationSheet: View {
                         Button("Preview changes") { prepare() }.disabled(!canPrepare).keyboardShortcut(.defaultAction)
                     }
                 }
-            }.buttonStyle(SMButtonStyle(.outline, size: .compact))
+            }.buttonStyle(SMMacButtonStyle())
         }.padding(24).frame(width: 760, height: 660)
             .background(DaddyTheme.canvas).interactiveDismissDisabled(working)
     }

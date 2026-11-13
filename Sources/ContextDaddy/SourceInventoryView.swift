@@ -1,5 +1,6 @@
 import ContextCore
 import SwiftUI
+import SaaSMakerUI
 
 struct SourceInventoryView: View {
     @Environment(ContextDaddyModel.self) private var model
@@ -126,8 +127,7 @@ struct SourceInventoryView: View {
     private func resetPage() { page = 0; expandedSource = nil }
 
     private var sourceSearch: some View {
-        TextField("Search files, paths, or sources", text: $search)
-            .textFieldStyle(.roundedBorder).frame(minWidth: 240, maxWidth: 360)
+        SMSearchField("Search files, paths, or sources", text: $search).frame(minWidth: 240, maxWidth: 360)
     }
 
     private var sourceFilters: some View {

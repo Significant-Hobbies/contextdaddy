@@ -24,9 +24,13 @@ struct MemoryLibraryView: View {
     @State private var comparisonID = UUID()
     @State private var duplicatesOnly = false
     @State private var page = 0
-    @State private var manager = MemoryDocumentManager()
+    @State private var manager: MemoryDocumentManager
     private let fixture: MemoryInventory?
-    init(snapshot: MemoryInventory? = nil) { fixture = snapshot; _snapshot = State(initialValue: snapshot) }
+    init(snapshot: MemoryInventory? = nil, manager: MemoryDocumentManager = MemoryDocumentManager()) {
+        fixture = snapshot
+        _snapshot = State(initialValue: snapshot)
+        _manager = State(initialValue: manager)
+    }
     private var matches: [MemoryEntry] {
         (snapshot?.entries ?? []).filter {
             (agent == nil || $0.agent == agent) && (kind == "All types" || $0.category == kind) &&
@@ -36,13 +40,12 @@ struct MemoryLibraryView: View {
     }
     var body: some View {
         GeometryReader { geometry in
-            let width = max(250, geometry.size.width - 44)
+            let width = max(250, geometry.size.width - 64)
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 18) {
-                        ViewThatFits(in: .horizontal) {
-                            HStack { titles; Spacer(); actions }
-                            VStack(alignment: .leading, spacing: 12) { titles; actions }
+                        SMWorkspaceHeader("memory", subtitle: "See what agents can remember. Keep the useful context.") {
+                            actions
                         }
                         folderControls
                         if loading { ProgressView("Finding instructions and saved memory…") }
@@ -69,7 +72,7 @@ struct MemoryLibraryView: View {
                                 }.padding(.top, 10)
                             }
                         }
-                    }.padding(22).frame(width: width + 44, alignment: .leading)
+                    }.padding(32).frame(width: width + 64, alignment: .leading)
                 }.frame(width: geometry.size.width, height: geometry.size.height).clipped()
                     .onChange(of: selected?.id) { _, id in if id != nil && width < 1050 { proxy.scrollTo("memory-detail", anchor: .top) } }
             }
@@ -82,12 +85,6 @@ struct MemoryLibraryView: View {
         .onChange(of: duplicatesOnly) { _, _ in reset() }
         .sheet(item: $editing) { entry in MemoryEditorSheet(entry: entry, manager: manager, changed: recheck) }
         .sheet(isPresented: $historyOpen) { MemoryHistorySheet(manager: manager, changed: recheck) }
-    }
-    private var titles: some View {
-        VStack(alignment: .leading, spacing: 5) {
-            SMSectionHeader("memory", size: 22).accessibilityLabel("Memory")
-            Text("See what agents can remember. Keep the useful context.").font(.callout).foregroundStyle(DaddyTheme.muted)
-        }
     }
     private var actions: some View {
         HStack { Button("history") { historyOpen = true }.accessibilityLabel("History"); Button("recheck", action: recheck).accessibilityLabel("Recheck").disabled(loading || model.isLoading) }
@@ -112,7 +109,7 @@ struct MemoryLibraryView: View {
         }
     }
     private func summary(_ snapshot: MemoryInventory) -> some View {
-        Panel(padding: 16) {
+        SMSettingsGroup {
             VStack(alignment: .leading, spacing: 8) {
                 let saved = snapshot.entries.filter { $0.category == "Saved memory" }.count
                 Text("\(snapshot.entries.count - saved) instruction & rule files · \(saved) saved-memory files").font(.headline)
@@ -120,12 +117,12 @@ struct MemoryLibraryView: View {
                 Button(comparing ? "Comparing…" : "Compare document contents for duplicates") { Task { await compare() } }.disabled(comparing || loading)
                 Text("Comparison reads up to 256 KiB per document locally. Contents are never sent to a service.").font(.caption).foregroundStyle(DaddyTheme.muted)
                 if let compareNote { Text(compareNote).font(.caption).foregroundStyle(DaddyTheme.amber) }
-            }.frame(maxWidth: .infinity, alignment: .leading)
+            }.padding(16).frame(maxWidth: .infinity, alignment: .leading)
         }
     }
     private var filters: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextField("Search filenames, folders or agents", text: $query).textFieldStyle(.roundedBorder)
+            SMSearchField("Search filenames, folders or agents", text: $query)
             ViewThatFits(in: .horizontal) {
                 HStack { agentPicker; typePicker }
                 VStack(alignment: .leading) { agentPicker; typePicker }
@@ -136,22 +133,45 @@ struct MemoryLibraryView: View {
     private var agentPicker: some View { Picker("Agent", selection: $agent) { Text("All agents").tag(AgentRuntime?.none); ForEach(AgentRuntime.allCases) { Text($0.rawValue).tag(Optional($0)) } }.frame(maxWidth: 240) }
     private var typePicker: some View { Picker("Type", selection: $kind) { ForEach(["All types", "Instructions", "Rule", "Saved memory"], id: \.self) { Text($0) } }.frame(maxWidth: 240) }
     private var ledger: some View {
-        Panel(padding: 12) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("\(matches.count) documents · largest first").font(.caption).foregroundStyle(DaddyTheme.muted)
+        SMSettingsGroup {
+            VStack(alignment: .leading, spacing: 0) {
+                Text("\(matches.count) documents · largest first")
+                    .font(.caption).foregroundStyle(DaddyTheme.muted).padding(16)
+                Divider()
                 ForEach(Array(matches.dropFirst(page * 8).prefix(8))) { entry in
                     Button { selected = entry } label: {
-                        VStack(alignment: .leading, spacing: 5) {
-                            Text(entry.name).font(.headline)
-                            Text("\(entry.agent?.rawValue ?? "Other") · \(entry.category) · \(ByteCountFormatter.string(fromByteCount: entry.bytes, countStyle: .file))").font(.caption).foregroundStyle(DaddyTheme.mint)
-                            Text(shortPath(entry.path)).font(.caption).foregroundStyle(DaddyTheme.muted).lineLimit(2).truncationMode(.middle)
-                            if duplicatePaths?.contains(entry.path) == true { Text("Exact content copy found · review scope before changing").font(.caption).foregroundStyle(DaddyTheme.amber) }
-                        }.padding(10).frame(maxWidth: .infinity, alignment: .leading)
-                            .background(selected?.id == entry.id ? DaddyTheme.mint.opacity(0.10) : .clear, in: RoundedRectangle(cornerRadius: 8)).contentShape(Rectangle())
-                    }.buttonStyle(.plain)
+                        VStack(alignment: .leading, spacing: 0) {
+                            SMResourceRow(entry.name, subtitle: shortPath(entry.path), systemImage: "doc.text") {
+                                EmptyView()
+                            } trailing: {
+                                VStack(alignment: .trailing, spacing: 5) {
+                                    Text(ByteCountFormatter.string(fromByteCount: entry.bytes, countStyle: .file))
+                                        .font(.callout.weight(.medium)).monospacedDigit()
+                                    Text("\(entry.agent?.rawValue ?? "Other") · \(entry.category)")
+                                        .font(.caption).foregroundStyle(DaddyTheme.muted)
+                                }
+                            }
+                            if duplicatePaths?.contains(entry.path) == true {
+                                Text("Exact content copy found · review scope before changing")
+                                    .font(.caption).foregroundStyle(DaddyTheme.amber)
+                                    .padding(.horizontal, 16).padding(.bottom, 12)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(selected?.id == entry.id ? DaddyTheme.mint.opacity(0.10) : .clear)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(selected?.id == entry.id ? .isSelected : [])
                     Divider()
                 }
-                HStack { Button("previous") { page -= 1; selected = nil }.accessibilityLabel("Previous").disabled(page == 0); Spacer(); Text("\(page + 1) / \(max(1, (matches.count + 7) / 8))").font(.caption); Spacer(); Button("next") { page += 1; selected = nil }.accessibilityLabel("Next").disabled((page + 1) * 8 >= matches.count) }
+                HStack {
+                    Button("previous") { page -= 1; selected = nil }.accessibilityLabel("Previous").disabled(page == 0)
+                    Spacer()
+                    Text("\(page + 1) / \(max(1, (matches.count + 7) / 8))").font(.caption).monospacedDigit()
+                    Spacer()
+                    Button("next") { page += 1; selected = nil }.accessibilityLabel("Next").disabled((page + 1) * 8 >= matches.count)
+                }.padding(16)
             }
         }
     }

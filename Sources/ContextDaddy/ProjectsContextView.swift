@@ -60,10 +60,10 @@ struct ProjectsContextView: View {
             )
             HStack(spacing: 12) {
                 Button("choose folder…", systemImage: "folder.badge.plus", action: chooseFolder).accessibilityLabel("Choose folder…")
-                    .buttonStyle(SMButtonStyle(.outline, size: .compact))
+                    .buttonStyle(SMMacButtonStyle())
                 if !search.isEmpty {
                     Button("clear search") { search = "" }.accessibilityLabel("Clear search")
-                        .buttonStyle(SMButtonStyle(.outline, size: .compact))
+                        .buttonStyle(SMMacButtonStyle())
                 }
             }
             ViewThatFits(in: .horizontal) {
@@ -146,8 +146,7 @@ struct ProjectsContextView: View {
     private func compare(_ a: Int64, _ b: Int64) -> ComparisonResult { a == b ? .orderedSame : (a < b ? .orderedAscending : .orderedDescending) }
 
     private var projectSearch: some View {
-        TextField("Search projects, files, or paths", text: $search)
-            .textFieldStyle(.roundedBorder)
+        SMSearchField("Search projects, files, or paths", text: $search)
             .frame(minWidth: 240, maxWidth: 380)
     }
 
