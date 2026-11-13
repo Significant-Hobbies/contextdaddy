@@ -94,7 +94,7 @@ struct RootView: View {
                         "contentLayoutRect": NSStringFromRect(window.contentLayoutRect),
                         "frame": NSStringFromRect(window.frame), "isKey": window.isKeyWindow]
             }
-            if let data = try? JSONSerialization.data(withJSONObject: windows, options: [.prettyPrinted, .sortedKeys]) {
+            if let data = try? JSONSerialization.data(withJSONObject: ["windows": windows, "reduceTransparency": NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency, "increaseContrast": NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast], options: [.prettyPrinted, .sortedKeys]) {
                 try? data.write(to: URL(fileURLWithPath: args[marker + 1]))
             }
         }
@@ -103,6 +103,8 @@ struct RootView: View {
         .font(DaddyTheme.type(14))
         .buttonStyle(SMMacButtonStyle())
         .toolbar(.hidden, for: .windowToolbar)
+        .toolbarBackground(DaddyTheme.canvas, for: .windowToolbar)
+        .toolbarBackground(.visible, for: .windowToolbar)
     }
 
     private var pageTitle: String { model.evidenceOpen ? "Files & diagnostics" : (model.section ?? .overview).label.capitalized }
