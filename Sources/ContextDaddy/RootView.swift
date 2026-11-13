@@ -79,32 +79,11 @@ struct RootView: View {
             .frame(width: viewport.size.width, height: viewport.size.height)
         }
         .task { if refreshOnAppear && !ContextStartupCheck.enabled { await model.refresh() } }
-        .task {
-            // Temporary isolated-candidate diagnostic; removed before shipping.
-            let args = ProcessInfo.processInfo.arguments
-            guard let marker = args.firstIndex(of: "--diagnose-window-chrome"), args.indices.contains(marker + 1) else { return }
-            try? await Task.sleep(for: .seconds(2))
-            let windows: [[String: Any]] = NSApp.windows.map { window in
-                let color = window.backgroundColor.usingColorSpace(.deviceRGB)
-                return ["title": window.title, "windowNumber": window.windowNumber,
-                        "titlebarAppearsTransparent": window.titlebarAppearsTransparent,
-                        "background": color.map { [$0.redComponent, $0.greenComponent, $0.blueComponent, $0.alphaComponent] } ?? [],
-                        "styleMask": window.styleMask.rawValue, "hasToolbar": window.toolbar != nil,
-                        "toolbarVisible": window.toolbar?.isVisible ?? false,
-                        "contentLayoutRect": NSStringFromRect(window.contentLayoutRect),
-                        "frame": NSStringFromRect(window.frame), "isKey": window.isKeyWindow]
-            }
-            if let data = try? JSONSerialization.data(withJSONObject: ["windows": windows, "reduceTransparency": NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency, "increaseContrast": NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast], options: [.prettyPrinted, .sortedKeys]) {
-                try? data.write(to: URL(fileURLWithPath: args[marker + 1]))
-            }
-        }
-        .background(SMWorkspaceWindowChrome())
+        .smWorkspaceWindowChrome()
         .contextTheme(DaddyTheme.palette)
         .font(DaddyTheme.type(14))
         .buttonStyle(SMMacButtonStyle())
         .toolbar(.hidden, for: .windowToolbar)
-        .toolbarBackground(DaddyTheme.canvas, for: .windowToolbar)
-        .toolbarBackground(.visible, for: .windowToolbar)
     }
 
     private var pageTitle: String { model.evidenceOpen ? "Files & diagnostics" : (model.section ?? .overview).label.capitalized }
