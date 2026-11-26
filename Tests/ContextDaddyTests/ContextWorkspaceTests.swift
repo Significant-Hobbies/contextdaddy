@@ -18,6 +18,10 @@ struct ContextWorkspaceTests {
         model.evidenceOpen = false
         #expect(ContextRoute.visible(in: model) == .memory)
         model.show(.skills)
+        for mode in [SkillsMode.ledger, .redundancy] {
+            model.skillsMode = mode
+            #expect(ContextRoute.visible(in: model) == .skills)
+        }
         model.skillsMode = .plugins
         #expect(ContextRoute.visible(in: model) == .plugins)
     }
