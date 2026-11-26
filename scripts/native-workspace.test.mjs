@@ -9,7 +9,7 @@ test('native resources, Memory recovery and workspace acceptance', { timeout: 11
   const root = fileURLToPath(new URL('../', import.meta.url));
   const result = spawnSync('npx', [
     '--offline', 'xcodebuildmcp', 'swift-package', 'test', '--package-path', root,
-    '--filter', 'ContextUIResourcesTests|MemoryManagementTests|rootKeepsSkillsInsideTheActualWindow|usageSectionsFitThePageWidthAndRenderEvidence|policyAndRedundancyWindowsRemainReachable',
+    '--filter', 'ContextWorkspaceTests|ContextUIResourcesTests|MemoryManagementTests|rootKeepsSkillsInsideTheActualWindow|usageSectionsFitThePageWidthAndRenderEvidence|policyAndRedundancyWindowsRemainReachable',
   ], { cwd: root, encoding: 'utf8', timeout: 115_000, maxBuffer: 16 * 1024 * 1024 });
 
   const output = `${result.stdout ?? ''}\n${result.stderr ?? ''}`;
@@ -19,6 +19,6 @@ test('native resources, Memory recovery and workspace acceptance', { timeout: 11
   const summary = output.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '')
     .match(/(\d+)\s+tests?\s+passed,\s*(\d+)\s+failed/);
   assert.ok(summary, 'XcodeBuildMCP did not report a completed native test run');
-  assert.ok(Number(summary[1]) >= 7, 'Expected resources, Memory, workspace, Usage and policy acceptance checks to execute');
+  assert.ok(Number(summary[1]) >= 11, 'Expected resources, Memory, workspace, Usage and policy acceptance checks to execute');
   assert.equal(Number(summary[2]), 0, 'Native checks reported failures');
 });

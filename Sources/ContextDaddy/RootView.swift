@@ -58,7 +58,18 @@ struct RootView: View {
                     }
                     VStack(spacing: 0) {
                         SMWorkspaceScopeBar(pageTitle, systemImage: pageIcon,
-                            detail: "Local to this Mac") { EmptyView() }
+                            detail: "Local to this Mac") {
+                            if embedded && !model.configurationHealth.issues.isEmpty {
+                                Button {
+                                    model.showEvidence(.diagnostics)
+                                } label: {
+                                    Label("\(model.configurationHealth.issues.count.formatted()) configuration issues",
+                                          systemImage: "exclamationmark.triangle")
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(model.configurationHealth.errorCount > 0 ? DaddyTheme.coral : DaddyTheme.amber)
+                            }
+                        }
                         Group {
                             if model.evidenceOpen {
                                 SourcesHubView()

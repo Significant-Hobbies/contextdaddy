@@ -2,12 +2,41 @@ import SwiftUI
 
 /// Persistent context inventory shared by the host's routes and quit review.
 @MainActor public final class ContextWorkspaceSession: ObservableObject {
-    fileprivate let model: ContextDaddyModel
-    fileprivate var loaded = false
-    public init() {
-        model = ContextDaddyModel()
+    let model: ContextDaddyModel
+    private let refresh: @MainActor (ContextDaddyModel) async -> Void
+    private var initialRefresh: Task<Void, Never>?
+
+    public convenience init() {
+        Self.importPresentationPreferences(from: UserDefaults(suiteName: "com.significanthobbies.contextdaddy"), to: .standard)
+        self.init(model: ContextDaddyModel()) { await $0.refresh() }
     }
-    public var activeWorkDescription: String? { ContextUpdateActivity.operations > 0 ? "An approved context change is being applied or restored." : model.activeWorkDescription }
+
+    init(model: ContextDaddyModel, refresh: @escaping @MainActor (ContextDaddyModel) async -> Void) {
+        self.model = model
+        self.refresh = refresh
+    }
+
+    // Paths and provider checks require new choices in this host. Only
+    // presentation settings and prior keep decisions cross the app boundary.
+    static func importPresentationPreferences(from source: UserDefaults?, to destination: UserDefaults) {
+        let marker = "contextDaddyImportedStandalonePreferencesV1"
+        guard !destination.bool(forKey: marker), let source else { return }
+        let keys = ["skillLibraryFavorites", "skillLibraryTags", "skillCleanupKeptDecisions",
+                    "contextDaddySessionTimeZone", "contextDaddySessionTimeRead", "skillLibraryGuideCompleted"]
+        for key in keys where destination.object(forKey: key) == nil {
+            if let value = source.object(forKey: key) { destination.set(value, forKey: key) }
+        }
+        destination.set(true, forKey: marker)
+    }
+
+    @discardableResult func startIfNeeded() -> Task<Void, Never> {
+        if let initialRefresh { return initialRefresh }
+        let task = Task { [model, refresh] in await refresh(model) }
+        initialRefresh = task
+        return task
+    }
+
+    public var activeWorkDescription: String? { model.activeWorkDescription }
 }
 
 public enum ContextRoute: String, CaseIterable {
@@ -29,19 +58,16 @@ public struct ContextWorkspaceView: View {
     public var body: some View {
         RootView(refreshOnAppear: false, embedded: true)
             .environment(session.model)
-            .onChange(of: route, initial: true) { _, destination in select(destination) }
-            .onChange(of: visibleRoute) { _, updated in
+            .onChange(of: route, initial: true) { _, destination in destination.select(in: session.model) }
+            .onChange(of: ContextRoute.visible(in: session.model)) { _, updated in
                 if updated != route { onNavigate(updated) }
             }
-            .task {
-                guard !session.loaded else { return }
-                await session.model.refresh()
-                if !Task.isCancelled { session.loaded = true }
-            }
+            .onAppear { session.startIfNeeded() }
     }
+}
 
-    private var visibleRoute: ContextRoute {
-        let model = session.model
+extension ContextRoute {
+    @MainActor static func visible(in model: ContextDaddyModel) -> ContextRoute {
         if model.evidenceOpen { return model.sourcesMode == .inventory ? .files : .diagnostics }
         switch model.section ?? .overview {
         case .overview: return .usage
@@ -52,9 +78,8 @@ public struct ContextWorkspaceView: View {
         }
     }
 
-    private func select(_ route: ContextRoute) {
-        let model = session.model
-        switch route {
+    @MainActor func select(in model: ContextDaddyModel) {
+        switch self {
         case .usage: model.show(.overview)
         case .memory: model.show(.memory)
         case .projects: model.show(.projects)
@@ -63,7 +88,7 @@ public struct ContextWorkspaceView: View {
         case .diagnostics: model.showEvidence(.diagnostics)
         case .skills, .cleanup, .plugins:
             model.show(.skills)
-            model.skillsMode = route == .cleanup ? .cleanup : route == .plugins ? .plugins : .library
+            model.skillsMode = self == .cleanup ? .cleanup : self == .plugins ? .plugins : .library
         }
     }
 }
