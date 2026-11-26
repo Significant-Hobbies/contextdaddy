@@ -1,7 +1,7 @@
 import Foundation
 import Testing
 @testable import ContextCore
-@testable import ContextWorkspaceKit
+@testable import ContextDaddy
 
 @MainActor
 struct UnifiedHistoryTests {

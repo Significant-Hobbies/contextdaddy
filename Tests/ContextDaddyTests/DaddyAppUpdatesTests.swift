@@ -1,6 +1,6 @@
 import XCTest
 #if canImport(ContextDaddy)
-@testable import ContextWorkspaceKit
+@testable import ContextDaddy
 #elseif canImport(StorageDaddy)
 @testable import StorageDaddy
 #elseif canImport(PerformanceDaddy)

@@ -208,13 +208,13 @@ private struct SemanticStatusPill: View {
 
 extension View {
     /// Use packaged fonts when available; missing optional fonts must not trap.
-    func contextTheme(_ palette: SMPalette) -> some View {
+    func contextTheme(_ palette: SMPalette, setsWindowAppearance: Bool = true) -> some View {
         _ = ContextUIResources.loaded
         return environment(\.smPalette, palette)
             .tint(palette.brand)
             .foregroundStyle(palette.foreground)
             .font(.custom(palette.sansFont, size: 14, relativeTo: .body))
             .background(palette.background.ignoresSafeArea())
-            .preferredColorScheme(palette.isDark ? .dark : .light)
+            .preferredColorScheme(setsWindowAppearance ? (palette.isDark ? .dark : .light) : nil)
     }
 }

@@ -2,7 +2,7 @@ import AppKit
 import ContextCore
 import SwiftUI
 import Testing
-@testable import ContextWorkspaceKit
+@testable import ContextDaddy
 
 @MainActor
 struct DesignSnapshotTests {

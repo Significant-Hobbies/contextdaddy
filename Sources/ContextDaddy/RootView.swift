@@ -15,6 +15,14 @@ struct RootView: View {
     var memorySelection: MemoryEntry?
 
     var body: some View {
+        if embedded {
+            content.contextTheme(DaddyTheme.palette, setsWindowAppearance: false)
+        } else {
+            content.smWorkspaceWindowChrome().contextTheme(DaddyTheme.palette).toolbar(.hidden, for: .windowToolbar)
+        }
+    }
+
+    private var content: some View {
         GeometryReader { viewport in
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
@@ -82,11 +90,8 @@ struct RootView: View {
             .frame(width: viewport.size.width, height: viewport.size.height)
         }
         .task { if refreshOnAppear && !ContextStartupCheck.enabled { await model.refresh() } }
-        .smWorkspaceWindowChrome()
-        .contextTheme(DaddyTheme.palette)
         .font(DaddyTheme.type(14))
         .buttonStyle(SMMacButtonStyle())
-        .toolbar(.hidden, for: .windowToolbar)
     }
 
     private var pageTitle: String { model.evidenceOpen ? "Files & diagnostics" : (model.section ?? .overview).label.capitalized }

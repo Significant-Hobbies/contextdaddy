@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 import Testing
-@testable import ContextWorkspaceKit
+@testable import ContextDaddy
 
 /// Direction probes only. These never check providers or change preferences.
 @MainActor

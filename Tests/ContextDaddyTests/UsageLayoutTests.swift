@@ -3,7 +3,7 @@ import AppKit
 @testable import ContextCore
 import SwiftUI
 import Testing
-@testable import ContextWorkspaceKit
+@testable import ContextDaddy
 
 /// Usage page layout: the page never lays out wider than (or offset from) its visible
 /// area, and the rendered page is written as native evidence at realistic window sizes.

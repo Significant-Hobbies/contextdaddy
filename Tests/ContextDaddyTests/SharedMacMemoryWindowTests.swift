@@ -3,7 +3,7 @@ import AppKit
 import SwiftUI
 import Testing
 import SaaSMakerUI
-@testable import ContextWorkspaceKit
+@testable import ContextDaddy
 
 /// Opt-in real-window evidence for the production Memory view. The ready file
 /// identifies the window; create `<ready>.done` to finish before the 120s bound.

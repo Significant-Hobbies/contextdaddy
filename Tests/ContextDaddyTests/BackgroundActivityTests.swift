@@ -1,7 +1,7 @@
 import AppKit
 import Combine
 import XCTest
-@testable import ContextWorkspaceKit
+@testable import ContextDaddy
 
 final class BackgroundActivityTests: XCTestCase {
     @MainActor func testUpdaterPublishesOnlyCombinedIdleTransitions() async {
