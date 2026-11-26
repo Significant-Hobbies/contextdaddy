@@ -63,7 +63,7 @@ struct RootView: View {
                                 Button {
                                     model.showEvidence(.diagnostics)
                                 } label: {
-                                    Label("\(model.configurationHealth.issues.count.formatted()) configuration issues",
+                                    Label("\(model.configurationHealth.issues.count.formatted()) configuration \(model.configurationHealth.issues.count == 1 ? "issue" : "issues")",
                                           systemImage: "exclamationmark.triangle")
                                 }
                                 .buttonStyle(.plain)

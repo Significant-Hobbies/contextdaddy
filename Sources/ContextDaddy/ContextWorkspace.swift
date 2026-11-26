@@ -19,10 +19,23 @@ import SwiftUI
     // Paths and provider checks require new choices in this host. Only
     // presentation settings and prior keep decisions cross the app boundary.
     static func importPresentationPreferences(from source: UserDefaults?, to destination: UserDefaults) {
-        let marker = "contextDaddyImportedStandalonePreferencesV1"
-        guard !destination.bool(forKey: marker), let source else { return }
+        let marker = "contextDaddyImportedStandalonePreferencesV2"
+        guard !destination.bool(forKey: marker) else { return }
+        let hadEarlierImport = destination.bool(forKey: "contextDaddyImportedStandalonePreferencesV1")
+        if hadEarlierImport {
+            // A pre-release host copied this consent flag. Require an explicit
+            // transcript-read action in this host before automatic reads.
+            destination.removeObject(forKey: "contextDaddySessionTimeRead")
+        }
+        guard let source else { return }
+        let rootKeys = ["contextDaddySearchRoots", "contextDaddySkillRoots"]
+        let needsFolderSetup = rootKeys.contains { key in
+            !(source.stringArray(forKey: key) ?? []).isEmpty && (destination.stringArray(forKey: key) ?? []).isEmpty
+        }
         let keys = ["skillLibraryFavorites", "skillLibraryTags", "skillCleanupKeptDecisions",
-                    "contextDaddySessionTimeZone", "contextDaddySessionTimeRead", "skillLibraryGuideCompleted"]
+                    "contextDaddySessionTimeZone", "skillLibraryGuideCompleted"]
+        guard hadEarlierImport || needsFolderSetup || keys.contains(where: { source.object(forKey: $0) != nil }) else { return }
+        if needsFolderSetup { destination.set(true, forKey: "contextDaddyShowFolderMigrationNotice") }
         for key in keys where destination.object(forKey: key) == nil {
             if let value = source.object(forKey: key) { destination.set(value, forKey: key) }
         }
@@ -31,7 +44,10 @@ import SwiftUI
 
     @discardableResult func startIfNeeded() -> Task<Void, Never> {
         if let initialRefresh { return initialRefresh }
-        let task = Task { [model, refresh] in await refresh(model) }
+        let task = Task { [weak self, model, refresh] in
+            await refresh(model)
+            if model.lastError != nil { self?.initialRefresh = nil }
+        }
         initialRefresh = task
         return task
     }
@@ -44,6 +60,7 @@ public enum ContextRoute: String, CaseIterable {
 }
 
 public struct ContextWorkspaceView: View {
+    @AppStorage("contextDaddyShowFolderMigrationNotice") private var showFolderNotice = false
     private let session: ContextWorkspaceSession
     private let route: ContextRoute
 
@@ -57,6 +74,17 @@ public struct ContextWorkspaceView: View {
 
     public var body: some View {
         RootView(refreshOnAppear: false, embedded: true)
+            .safeAreaInset(edge: .top) {
+                if showFolderNotice && (route == .skills || route == .files) {
+                    HStack {
+                        Text("Choose your custom folders again in Skills → More → Search locations or Source files → Add folder.")
+                            .font(.callout)
+                        Spacer()
+                        Button("Dismiss") { showFolderNotice = false }
+                    }
+                    .padding(.horizontal, 16).padding(.vertical, 8)
+                }
+            }
             .environment(session.model)
             .onChange(of: route, initial: true) { _, destination in destination.select(in: session.model) }
             .onChange(of: ContextRoute.visible(in: session.model)) { _, updated in
@@ -86,9 +114,12 @@ extension ContextRoute {
         case .telemetry: model.show(.telemetry)
         case .files: model.showEvidence(.inventory)
         case .diagnostics: model.showEvidence(.diagnostics)
-        case .skills, .cleanup, .plugins:
+        case .skills:
             model.show(.skills)
-            model.skillsMode = self == .cleanup ? .cleanup : self == .plugins ? .plugins : .library
+            if model.skillsMode == .plugins || model.skillsMode == .cleanup { model.skillsMode = .library }
+        case .cleanup, .plugins:
+            model.show(.skills)
+            model.skillsMode = self == .cleanup ? .cleanup : .plugins
         }
     }
 }
