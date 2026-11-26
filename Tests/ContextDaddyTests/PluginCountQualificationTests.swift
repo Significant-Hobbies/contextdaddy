@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 import Testing
 @testable import ContextCore
-@testable import ContextDaddy
+@testable import ContextWorkspaceKit
 
 @MainActor
 @Suite(.serialized)

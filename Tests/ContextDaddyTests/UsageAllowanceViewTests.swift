@@ -3,7 +3,7 @@ import AppKit
 import ContextCore
 import SwiftUI
 import Testing
-@testable import ContextDaddy
+@testable import ContextWorkspaceKit
 
 @MainActor
 struct UsageAllowanceViewTests {

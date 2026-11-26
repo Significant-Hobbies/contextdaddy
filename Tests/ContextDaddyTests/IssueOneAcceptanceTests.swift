@@ -3,7 +3,7 @@ import AppKit
 import SwiftUI
 import Testing
 @testable import ContextCore
-@testable import ContextDaddy
+@testable import ContextWorkspaceKit
 
 /// Portable native acceptance for issue #1. Uses synthetic records only;
 /// never refreshes machine inventory, provider allowances, or configuration.

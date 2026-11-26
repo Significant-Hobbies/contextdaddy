@@ -7,6 +7,7 @@ struct RootView: View {
     @Environment(ContextDaddyModel.self) private var model
     /// Disable automatic refresh for a supplied, already-loaded preview model.
     var refreshOnAppear = true
+    var embedded = false
 
     /// Supplied only by the isolated native review host.
     var memorySnapshot: MemoryInventory?
@@ -17,6 +18,7 @@ struct RootView: View {
         GeometryReader { viewport in
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
+                    if !embedded {
                     SMWorkspaceSidebar(width: 198) {
                         BrandMark()
                     } navigation: {
@@ -44,6 +46,7 @@ struct RootView: View {
                         }
                     } footer: {
                         PrivacyFooter()
+                    }
                     }
                     VStack(spacing: 0) {
                         SMWorkspaceScopeBar(pageTitle, systemImage: pageIcon,

@@ -1,5 +1,5 @@
 import XCTest
-@testable import ContextDaddy
+@testable import ContextWorkspaceKit
 
 final class ContextUpdateActivityTests: XCTestCase {
     @MainActor func testNestedManagementOperationsKeepRelaunchBlocked() async throws {

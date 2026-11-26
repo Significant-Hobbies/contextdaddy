@@ -1,7 +1,7 @@
 import Foundation
 import SaaSMakerUI
 import Testing
-@testable import ContextDaddy
+@testable import ContextWorkspaceKit
 
 struct ContextUIResourcesTests {
     @Test func missingBundleUsesFallback() {

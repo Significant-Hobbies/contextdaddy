@@ -9,16 +9,18 @@ let package = Package(
     name: "ContextDaddy",
     platforms: [.macOS(.v14)],
     products: [
+        .library(name: "ContextWorkspaceKit", targets: ["ContextWorkspaceKit"]),
         .library(name: "ContextCore", targets: ["ContextCore"]),
         .executable(name: "ContextDaddy", targets: ["ContextDaddy"]),
     ],
     dependencies: [.package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"), .package(url: "https://github.com/sass-maker/ui-library", revision: "f45faf3eb04af08cff2022710c8b8157a60bf5fa")],
     targets: [
         .target(name: "ContextCore", linkerSettings: [.linkedLibrary("sqlite3")]),
-        .executableTarget(name: "ContextDaddy", dependencies: [.product(name: "SaaSMakerUI", package: "ui-library"), "ContextCore", .product(name: "Sparkle", package: "Sparkle")],
+        .executableTarget(name: "ContextDaddy", dependencies: ["ContextWorkspaceKit"], path: "Sources/Standalone"),
+        .target(name: "ContextWorkspaceKit", dependencies: [.product(name: "SaaSMakerUI", package: "ui-library"), "ContextCore", .product(name: "Sparkle", package: "Sparkle")], path: "Sources/ContextDaddy",
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]),
         .testTarget(name: "ContextCoreTests", dependencies: ["ContextCore"]),
-        .testTarget(name: "ContextDaddyTests", dependencies: ["ContextDaddy"],
+        .testTarget(name: "ContextDaddyTests", dependencies: ["ContextWorkspaceKit"],
             linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", sparkleTestFrameworks])]),
     ]
 )
