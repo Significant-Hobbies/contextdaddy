@@ -1,10 +1,9 @@
 import AppKit
 import SwiftUI
 
-@main
-enum ContextDaddyMain {
+public enum ContextDaddyMain {
     @MainActor
-    static func main() {
+    public static func main() {
         if CommandLine.arguments.contains("--check-ui-resources") {
             guard ContextUIResources.loaded else {
                 FileHandle.standardError.write(Data("ContextDaddy UI resources missing or invalid\n".utf8))

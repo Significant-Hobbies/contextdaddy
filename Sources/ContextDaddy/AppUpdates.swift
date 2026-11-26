@@ -11,7 +11,7 @@ import Combine
         // sheets closing and management tasks completing outside a model refresh.
         let isIdle = { [weak model] in
             guard let model else { return false }
-            return model.activeWorkDescription == nil && ContextUpdateActivity.operations == 0
+            return model.activeWorkDescription == nil
                 && NSApplication.shared.modalWindow == nil
                 && !NSApplication.shared.windows.contains { $0.attachedSheet != nil }
         }

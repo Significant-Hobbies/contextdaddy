@@ -361,6 +361,8 @@ struct SkillLibraryView: View {
         HStack {
             Button("clean up duplicates") { openOrganization(.cleanup) }.accessibilityLabel("Clean up duplicates")
             Menu("More") {
+                Button(SkillsMode.ledger.rawValue) { model.skillsMode = .ledger }
+                Button(SkillsMode.redundancy.rawValue) { model.skillsMode = .redundancy }
                 Button("manage plugins…") { model.skillsMode = .plugins }.accessibilityLabel("Manage plugins…")
                 Button("create skill…") { showCreate = true }.accessibilityLabel("Create skill…")
                 Button("import skill…") { importFolder() }.accessibilityLabel("Import skill…")

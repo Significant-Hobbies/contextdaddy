@@ -190,6 +190,7 @@ final class ContextDaddyModel {
     }
 
     var activeWorkDescription: String? {
+        if ContextUpdateActivity.operations > 0 { return "An approved context change is being applied or restored." }
         if isLoading || isContextRefreshRunning || isSkillFolderLoading || isVerifyingSkillIssues || isVerifyingConfigurationIssues {
             return "A local context review is still running."
         }

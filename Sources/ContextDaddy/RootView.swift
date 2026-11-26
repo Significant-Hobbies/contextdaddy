@@ -7,6 +7,7 @@ struct RootView: View {
     @Environment(ContextDaddyModel.self) private var model
     /// Disable automatic refresh for a supplied, already-loaded preview model.
     var refreshOnAppear = true
+    var embedded = false
 
     /// Supplied only by the isolated native review host.
     var memorySnapshot: MemoryInventory?
@@ -14,9 +15,18 @@ struct RootView: View {
     var memorySelection: MemoryEntry?
 
     var body: some View {
+        if embedded {
+            content.contextTheme(DaddyTheme.palette, setsWindowAppearance: false)
+        } else {
+            content.smWorkspaceWindowChrome().contextTheme(DaddyTheme.palette).toolbar(.hidden, for: .windowToolbar)
+        }
+    }
+
+    private var content: some View {
         GeometryReader { viewport in
             VStack(spacing: 0) {
                 HStack(spacing: 0) {
+                    if !embedded {
                     SMWorkspaceSidebar(width: 198) {
                         BrandMark()
                     } navigation: {
@@ -45,9 +55,21 @@ struct RootView: View {
                     } footer: {
                         PrivacyFooter()
                     }
+                    }
                     VStack(spacing: 0) {
                         SMWorkspaceScopeBar(pageTitle, systemImage: pageIcon,
-                            detail: "Local to this Mac") { EmptyView() }
+                            detail: "Local to this Mac") {
+                            if embedded && !model.configurationHealth.issues.isEmpty {
+                                Button {
+                                    model.showEvidence(.diagnostics)
+                                } label: {
+                                    Label("\(model.configurationHealth.issues.count.formatted()) configuration \(model.configurationHealth.issues.count == 1 ? "issue" : "issues")",
+                                          systemImage: "exclamationmark.triangle")
+                                }
+                                .buttonStyle(.plain)
+                                .foregroundStyle(model.configurationHealth.errorCount > 0 ? DaddyTheme.coral : DaddyTheme.amber)
+                            }
+                        }
                         Group {
                             if model.evidenceOpen {
                                 SourcesHubView()
@@ -79,11 +101,8 @@ struct RootView: View {
             .frame(width: viewport.size.width, height: viewport.size.height)
         }
         .task { if refreshOnAppear && !ContextStartupCheck.enabled { await model.refresh() } }
-        .smWorkspaceWindowChrome()
-        .contextTheme(DaddyTheme.palette)
         .font(DaddyTheme.type(14))
         .buttonStyle(SMMacButtonStyle())
-        .toolbar(.hidden, for: .windowToolbar)
     }
 
     private var pageTitle: String { model.evidenceOpen ? "Files & diagnostics" : (model.section ?? .overview).label.capitalized }

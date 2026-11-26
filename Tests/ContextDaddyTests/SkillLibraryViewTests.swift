@@ -177,8 +177,8 @@ struct SkillLibraryViewTests {
         let defaults = try #require(UserDefaults(suiteName: suite))
         defer { defaults.removePersistentDomain(forName: suite) }
         model.show(.skills)
-        for width in [880, 1240, 1440] {
-            let host = NSHostingView(rootView: RootView(refreshOnAppear: false)
+        for (width, embedded) in [(880, false), (1240, false), (1440, false), (880, true)] {
+            let host = NSHostingView(rootView: RootView(refreshOnAppear: false, embedded: embedded)
                 .environment(model).defaultAppStorage(defaults))
             host.frame = NSRect(x: 0, y: 0, width: width, height: 640)
             let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
@@ -188,6 +188,8 @@ struct SkillLibraryViewTests {
             let scroll = try #require(scrollViews(host).first { $0.bounds.width > 300 })
             let viewport = scroll.convert(scroll.bounds, to: host)
             #expect(viewport.minX >= -1)
+            if embedded { #expect(viewport.minX < 150) }
+            else { #expect(viewport.minX >= 198) }
             #expect(viewport.minY >= -1)
             #expect(viewport.maxX <= host.bounds.maxX + 1)
             #expect(viewport.maxY <= host.bounds.maxY + 1)
